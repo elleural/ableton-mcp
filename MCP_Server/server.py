@@ -520,28 +520,67 @@ def get_device_parameters(ctx: Context, track_index: int, device_index: int) -> 
         return f"Error getting device parameters: {str(e)}"
 
 @mcp.tool()
-def set_device_parameter(ctx: Context, track_index: int, device_index: int, parameter_index: int, value: float) -> str:
+def set_device_parameter(
+    ctx: Context,
+    track_index: int,
+    device_index: int,
+    value: float,
+    parameter_index: int = None,
+    parameter_name: str = None
+) -> str:
     """
-    Set the value of a parameter for a specific device.
+    Set the value of a parameter for a specific device, identifying the parameter by its index or name.
 
     Parameters:
     - track_index: The index of the track containing the device.
     - device_index: The index of the device on the track.
-    - parameter_index: The index of the parameter to set.
     - value: The new value for the parameter.
+    - parameter_index: The index of the parameter to set. Use this or parameter_name.
+    - parameter_name: The name of the parameter to set. Use this or parameter_index.
     """
+    if parameter_index is None and parameter_name is None:
+        return "Error: You must provide either a parameter_index or a parameter_name."
+
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("set_device_parameter", {
+
+        params = {
             "track_index": track_index,
             "device_index": device_index,
-            "parameter_index": parameter_index,
             "value": value
-        })
-        return f"Set parameter {parameter_index} on device {device_index} of track {track_index} to {result.get('new_value', value)}"
+        }
+        if parameter_index is not None:
+            params["parameter_index"] = parameter_index
+        if parameter_name is not None:
+            params["parameter_name"] = parameter_name
+
+        result = ableton.send_command("set_device_parameter", params)
+
+        return f"Set parameter '{result.get('parameter_name')}' on device {device_index} of track {track_index} to {result.get('new_value', value)}"
     except Exception as e:
         logger.error(f"Error setting device parameter: {str(e)}")
         return f"Error setting device parameter: {str(e)}"
+
+@mcp.tool()
+def delete_device(ctx: Context, track_index: int, device_index: int) -> str:
+    """
+    Delete a device from a track.
+
+    Parameters:
+    - track_index: The index of the track containing the device.
+    - device_index: The index of the device to delete.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("delete_device", {
+            "track_index": track_index,
+            "device_index": device_index
+        })
+        deleted_name = result.get('deleted_device_name', 'Unknown device')
+        return f"Deleted device '{deleted_name}' from track {track_index}."
+    except Exception as e:
+        logger.error(f"Error deleting device: {str(e)}")
+        return f"Error deleting device: {str(e)}"
 
 @mcp.tool()
 def get_browser_tree(ctx: Context, category_type: str = "all") -> str:

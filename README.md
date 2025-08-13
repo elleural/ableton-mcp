@@ -131,6 +131,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Add notes to MIDI clips
 - Change tempo and other session parameters
 - Get and set parameters for devices on any track
+- Delete devices from a track
 
 ## Example Commands
 
@@ -146,6 +147,7 @@ Here are some examples of what you can ask Claude to do:
 - "Add a jazz chord progression to the clip in track 1"
 - "Get the parameters for the first device on track 1"
 - "Set the filter frequency on the synth to 800hz"
+- "Delete the second device from track 1"
 - "Set the tempo to 120 BPM"
 - "Play the clip in track 2"
 

@@ -230,7 +230,7 @@ class AbletonMCP(ControlSurface):
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
                                  "set_tempo", "fire_clip", "stop_clip",
                                  "start_playback", "stop_playback", "load_browser_item",
-                                 "get_device_parameters", "set_device_parameter"]:
+                                 "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -290,9 +290,14 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_device_parameter":
                             track_index = params.get("track_index", 0)
                             device_index = params.get("device_index", 0)
-                            parameter_index = params.get("parameter_index", 0)
                             value = params.get("value", 0)
-                            result = self._set_device_parameter(track_index, device_index, parameter_index, value)
+                            parameter_index = params.get("parameter_index")
+                            parameter_name = params.get("parameter_name")
+                            result = self._set_device_parameter(track_index, device_index, value, parameter_index, parameter_name)
+                        elif command_type == "delete_device":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            result = self._delete_device(track_index, device_index)
                         
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -810,6 +815,29 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error finding browser item by URI: {0}".format(str(e)))
             return None
     
+    def _delete_device(self, track_index, device_index):
+        """Delete a device from a track"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+
+            track = self._song.tracks[track_index]
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+
+            device_name = track.devices[device_index].name
+            track.delete_device(device_index)
+
+            return {
+                "track_index": track_index,
+                "device_index": device_index,
+                "deleted_device_name": device_name
+            }
+        except Exception as e:
+            self.log_message("Error deleting device: " + str(e))
+            raise
+
     def _get_device_parameters(self, track_index, device_index):
         """Get a list of parameters for a device"""
         try:
@@ -848,8 +876,8 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error getting device parameters: " + str(e))
             raise
 
-    def _set_device_parameter(self, track_index, device_index, parameter_index, value):
-        """Set a parameter for a device"""
+    def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):
+        """Set a parameter for a device by index or name"""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -861,21 +889,32 @@ class AbletonMCP(ControlSurface):
 
             device = track.devices[device_index]
 
-            if parameter_index < 0 or parameter_index >= len(device.parameters):
-                raise IndexError("Parameter index out of range")
+            parameter_to_set = None
 
-            parameter = device.parameters[parameter_index]
+            if parameter_index is not None:
+                if parameter_index < 0 or parameter_index >= len(device.parameters):
+                    raise IndexError("Parameter index out of range")
+                parameter_to_set = device.parameters[parameter_index]
+            elif parameter_name is not None:
+                for param in device.parameters:
+                    if param.name.lower() == parameter_name.lower():
+                        parameter_to_set = param
+                        break
+                if parameter_to_set is None:
+                    raise ValueError("Parameter with name '{0}' not found".format(parameter_name))
+            else:
+                raise ValueError("Either parameter_index or parameter_name must be provided")
 
-            if not parameter.is_enabled:
+            if not parameter_to_set.is_enabled:
                 raise Exception("Parameter is not enabled")
 
-            parameter.value = value
+            parameter_to_set.value = value
 
             return {
                 "track_index": track_index,
                 "device_index": device_index,
-                "parameter_index": parameter_index,
-                "new_value": parameter.value
+                "parameter_name": parameter_to_set.name,
+                "new_value": parameter_to_set.value
             }
         except Exception as e:
             self.log_message("Error setting device parameter: " + str(e))

@@ -140,6 +140,7 @@ Here are some examples of what you can ask Claude to do:
 - "Create an 80s synthwave track" [Demo](https://youtu.be/VH9g66e42XA)
 - "Create a Metro Boomin style hip-hop beat"
 - "Create a new MIDI track with a synth bass instrument"
+- "Create a new audio track"
 - "Add reverb to my drums"
 - "Create a 4-bar MIDI clip with a simple melody"
 - "Get information about the current Ableton session"
@@ -148,6 +149,7 @@ Here are some examples of what you can ask Claude to do:
 - "Get the parameters for the first device on track 1"
 - "Set the filter frequency on the synth to 800hz"
 - "Delete the second device from track 1"
+- "Load the 'My Kick Drum.wav' sample onto audio track 2"
 - "Set the tempo to 120 BPM"
 - "Play the clip in track 2"
 

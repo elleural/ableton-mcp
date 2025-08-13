@@ -301,6 +301,22 @@ def create_midi_track(ctx: Context, index: int = -1) -> str:
         logger.error(f"Error creating MIDI track: {str(e)}")
         return f"Error creating MIDI track: {str(e)}"
 
+@mcp.tool()
+def create_audio_track(ctx: Context, index: int = -1) -> str:
+    """
+    Create a new audio track in the Ableton session.
+
+    Parameters:
+    - index: The index to insert the track at (-1 = end of list)
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("create_audio_track", {"index": index})
+        return f"Created new audio track: {result.get('name', 'unknown')}"
+    except Exception as e:
+        logger.error(f"Error creating audio track: {str(e)}")
+        return f"Error creating audio track: {str(e)}"
+
 
 @mcp.tool()
 def set_track_name(ctx: Context, track_index: int, name: str) -> str:
@@ -410,11 +426,11 @@ def set_tempo(ctx: Context, tempo: float) -> str:
 @mcp.tool()
 def load_instrument_or_effect(ctx: Context, track_index: int, uri: str) -> str:
     """
-    Load an instrument or effect onto a track using its URI.
+    Load an instrument, effect, or audio file from the browser onto a track using its URI.
     
     Parameters:
-    - track_index: The index of the track to load the instrument on
-    - uri: The URI of the instrument or effect to load (e.g., 'query:Synths#Instrument%20Rack:Bass:FileId_5116')
+    - track_index: The index of the track to load the item on.
+    - uri: The URI of the browser item to load (e.g., an instrument, audio effect, or an audio file).
     """
     try:
         ableton = get_ableton_connection()

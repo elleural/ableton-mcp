@@ -500,6 +500,50 @@ def stop_playback(ctx: Context) -> str:
         return f"Error stopping playback: {str(e)}"
 
 @mcp.tool()
+def get_device_parameters(ctx: Context, track_index: int, device_index: int) -> str:
+    """
+    Get a list of parameters for a specific device on a track.
+
+    Parameters:
+    - track_index: The index of the track containing the device.
+    - device_index: The index of the device on the track.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_device_parameters", {
+            "track_index": track_index,
+            "device_index": device_index
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting device parameters: {str(e)}")
+        return f"Error getting device parameters: {str(e)}"
+
+@mcp.tool()
+def set_device_parameter(ctx: Context, track_index: int, device_index: int, parameter_index: int, value: float) -> str:
+    """
+    Set the value of a parameter for a specific device.
+
+    Parameters:
+    - track_index: The index of the track containing the device.
+    - device_index: The index of the device on the track.
+    - parameter_index: The index of the parameter to set.
+    - value: The new value for the parameter.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_device_parameter", {
+            "track_index": track_index,
+            "device_index": device_index,
+            "parameter_index": parameter_index,
+            "value": value
+        })
+        return f"Set parameter {parameter_index} on device {device_index} of track {track_index} to {result.get('new_value', value)}"
+    except Exception as e:
+        logger.error(f"Error setting device parameter: {str(e)}")
+        return f"Error setting device parameter: {str(e)}"
+
+@mcp.tool()
 def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
     """
     Get a hierarchical tree of browser categories from Ableton.

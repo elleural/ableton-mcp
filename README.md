@@ -132,6 +132,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Change tempo and other session parameters
 - Get and set parameters for devices on any track
 - Delete devices from a track
+- Create, list, fire, and rename scenes
 
 ## Example Commands
 
@@ -152,6 +153,9 @@ Here are some examples of what you can ask Claude to do:
 - "Load the 'My Kick Drum.wav' sample onto audio track 2"
 - "Set the tempo to 120 BPM"
 - "Play the clip in track 2"
+- "List all the scenes"
+- "Fire scene 2"
+- "Rename scene 2 to 'Chorus'"
 
 
 ## Troubleshooting

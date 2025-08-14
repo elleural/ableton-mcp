@@ -286,6 +286,68 @@ def get_track_info(ctx: Context, track_index: int) -> str:
         return f"Error getting track info: {str(e)}"
 
 @mcp.tool()
+def list_scenes(ctx: Context) -> str:
+    """Get a list of all scenes in the Ableton session."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("list_scenes")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error listing scenes: {str(e)}")
+        return f"Error listing scenes: {str(e)}"
+
+@mcp.tool()
+def fire_scene(ctx: Context, scene_index: int) -> str:
+    """
+    Fire a scene in the Ableton session.
+
+    Parameters:
+    - scene_index: The index of the scene to fire.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("fire_scene", {"scene_index": scene_index})
+        return f"Fired scene {scene_index}."
+    except Exception as e:
+        logger.error(f"Error firing scene: {str(e)}")
+        return f"Error firing scene: {str(e)}"
+
+@mcp.tool()
+def create_scene(ctx: Context, scene_index: int = -1) -> str:
+    """
+    Create a new scene in the Ableton session.
+
+    Parameters:
+    - scene_index: The index to create the scene at (-1 = end of list).
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("create_scene", {"scene_index": scene_index})
+        new_index = result.get('scene_index', scene_index)
+        return f"Created new scene at index {new_index}."
+    except Exception as e:
+        logger.error(f"Error creating scene: {str(e)}")
+        return f"Error creating scene: {str(e)}"
+
+@mcp.tool()
+def rename_scene(ctx: Context, scene_index: int, name: str) -> str:
+    """
+    Rename a scene in the Ableton session.
+
+    Parameters:
+    - scene_index: The index of the scene to rename.
+    - name: The new name for the scene.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("rename_scene", {"scene_index": scene_index, "name": name})
+        new_name = result.get('new_name', name)
+        return f"Renamed scene {scene_index} to '{new_name}'."
+    except Exception as e:
+        logger.error(f"Error renaming scene: {str(e)}")
+        return f"Error renaming scene: {str(e)}"
+
+@mcp.tool()
 def create_midi_track(ctx: Context, index: int = -1) -> str:
     """
     Create a new MIDI track in the Ableton session.

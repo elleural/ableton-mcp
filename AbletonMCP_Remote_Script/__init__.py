@@ -222,13 +222,15 @@ class AbletonMCP(ControlSurface):
             # Route the command to the appropriate handler
             if command_type == "get_session_info":
                 response["result"] = self._get_session_info()
+            elif command_type == "list_scenes":
+                response["result"] = self._list_scenes()
             elif command_type == "get_track_info":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_track_info(track_index)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
-                                 "set_tempo", "fire_clip", "stop_clip",
+                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene",
                                  "start_playback", "stop_playback", "load_browser_item",
                                  "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
@@ -274,6 +276,16 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             clip_index = params.get("clip_index", 0)
                             result = self._stop_clip(track_index, clip_index)
+                        elif command_type == "fire_scene":
+                            scene_index = params.get("scene_index", 0)
+                            result = self._fire_scene(scene_index)
+                        elif command_type == "create_scene":
+                            scene_index = params.get("scene_index", -1)
+                            result = self._create_scene(scene_index)
+                        elif command_type == "rename_scene":
+                            scene_index = params.get("scene_index", 0)
+                            name = params.get("name", "")
+                            result = self._rename_scene(scene_index, name)
                         elif command_type == "start_playback":
                             result = self._start_playback()
                         elif command_type == "stop_playback":
@@ -433,6 +445,75 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error getting track info: " + str(e))
             raise
     
+    def _list_scenes(self):
+        """Get a list of all scenes in the session"""
+        try:
+            scenes = []
+            for index, scene in enumerate(self._song.scenes):
+                scenes.append({
+                    "index": index,
+                    "name": scene.name
+                })
+            return {
+                "scenes": scenes,
+                "scene_count": len(scenes)
+            }
+        except Exception as e:
+            self.log_message("Error listing scenes: " + str(e))
+            raise
+
+    def _fire_scene(self, scene_index):
+        """Fire a scene"""
+        try:
+            if scene_index < 0 or scene_index >= len(self._song.scenes):
+                raise IndexError("Scene index out of range")
+
+            scene = self._song.scenes[scene_index]
+            scene.fire()
+
+            return {
+                "fired": True,
+                "scene_index": scene_index
+            }
+        except Exception as e:
+            self.log_message("Error firing scene: " + str(e))
+            raise
+
+    def _create_scene(self, scene_index):
+        """Create a new scene"""
+        try:
+            # Create the scene at the specified index
+            self._song.create_scene(scene_index)
+
+            # Get the new scene's index
+            new_scene_index = len(self._song.scenes) - 1 if scene_index == -1 else scene_index
+
+            return {
+                "created": True,
+                "scene_index": new_scene_index
+            }
+        except Exception as e:
+            self.log_message("Error creating scene: " + str(e))
+            raise
+
+    def _rename_scene(self, scene_index, name):
+        """Rename a scene"""
+        try:
+            if scene_index < 0 or scene_index >= len(self._song.scenes):
+                raise IndexError("Scene index out of range")
+
+            scene = self._song.scenes[scene_index]
+            scene.name = name
+
+            return {
+                "renamed": True,
+                "scene_index": scene_index,
+                "new_name": scene.name
+            }
+        except Exception as e:
+            self.log_message("Error renaming scene: " + str(e))
+            raise
+
     def _create_midi_track(self, index):
         """Create a new MIDI track at the specified index"""
         try:

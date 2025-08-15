@@ -133,6 +133,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Get and set parameters for devices on any track
 - Delete devices from a track
 - Create, list, fire, and rename scenes
+- Write automation for device parameters
 
 ## Example Commands
 
@@ -156,6 +157,7 @@ Here are some examples of what you can ask Claude to do:
 - "List all the scenes"
 - "Fire scene 2"
 - "Rename scene 2 to 'Chorus'"
+- "Create a filter sweep automation on the first device of track 1"
 
 
 ## Troubleshooting

@@ -230,7 +230,7 @@ class AbletonMCP(ControlSurface):
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
-                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene",
+                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation",
                                  "start_playback", "stop_playback", "load_browser_item",
                                  "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
@@ -286,6 +286,9 @@ class AbletonMCP(ControlSurface):
                             scene_index = params.get("scene_index", 0)
                             name = params.get("name", "")
                             result = self._rename_scene(scene_index, name)
+                        elif command_type == "write_automation":
+                            params_to_pass = params.copy()
+                            result = self._write_automation(**params_to_pass)
                         elif command_type == "start_playback":
                             result = self._start_playback()
                         elif command_type == "stop_playback":
@@ -512,6 +515,63 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error renaming scene: " + str(e))
+            raise
+
+    def _write_automation(self, track_index, clip_index, device_index, points, parameter_index=None, parameter_name=None):
+        """Write automation points for a device parameter within a clip."""
+        try:
+            # 1. Get the clip
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+            if not clip_slot.has_clip:
+                raise ValueError("No clip in the specified slot.")
+            clip = clip_slot.clip
+
+            # 2. Get the device
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+            device = track.devices[device_index]
+
+            # 3. Get the parameter
+            parameter = None
+            if parameter_index is not None:
+                if parameter_index < 0 or parameter_index >= len(device.parameters):
+                    raise IndexError("Parameter index out of range")
+                parameter = device.parameters[parameter_index]
+            elif parameter_name is not None:
+                for p in device.parameters:
+                    if p.name.lower() == parameter_name.lower():
+                        parameter = p
+                        break
+                if parameter is None:
+                    raise ValueError("Parameter with name '{0}' not found".format(parameter_name))
+            else:
+                raise ValueError("Either parameter_index or parameter_name must be provided")
+
+            if not parameter:
+                raise ValueError("Parameter could not be found.")
+
+            # 4. Get or create the automation envelope
+            envelope = clip.get_automation_envelope(parameter)
+
+            # 5. Set the automation points
+            automation_points = []
+            for point in points:
+                automation_points.append((point.get("time"), point.get("value")))
+
+            envelope.set_automation(tuple(automation_points))
+
+            return {
+                "wrote_automation": True,
+                "point_count": len(automation_points),
+                "parameter_name": parameter.name
+            }
+        except Exception as e:
+            self.log_message("Error writing automation: " + str(e))
             raise
 
     def _create_midi_track(self, index):

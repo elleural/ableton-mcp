@@ -348,6 +348,53 @@ def rename_scene(ctx: Context, scene_index: int, name: str) -> str:
         return f"Error renaming scene: {str(e)}"
 
 @mcp.tool()
+def write_automation(
+    ctx: Context,
+    track_index: int,
+    clip_index: int,
+    device_index: int,
+    points: List[Dict[str, float]],
+    parameter_index: int = None,
+    parameter_name: str = None
+) -> str:
+    """
+    Write automation points for a device parameter within a clip.
+
+    Parameters:
+    - track_index: The index of the track.
+    - clip_index: The index of the clip slot.
+    - device_index: The index of the device on the track.
+    - points: A list of automation points. Each point is a dictionary with "time" and "value" keys.
+              Example: [{"time": 0.0, "value": 0.0}, {"time": 4.0, "value": 1.0}]
+    - parameter_index: The index of the parameter to automate (optional).
+    - parameter_name: The name of the parameter to automate (optional).
+    """
+    if parameter_index is None and parameter_name is None:
+        return "Error: You must provide either a parameter_index or a parameter_name."
+
+    try:
+        ableton = get_ableton_connection()
+
+        params = {
+            "track_index": track_index,
+            "clip_index": clip_index,
+            "device_index": device_index,
+            "points": points,
+        }
+        if parameter_index is not None:
+            params["parameter_index"] = parameter_index
+        if parameter_name is not None:
+            params["parameter_name"] = parameter_name
+
+        result = ableton.send_command("write_automation", params)
+        point_count = result.get('point_count', len(points))
+        param_name = result.get('parameter_name', 'Unknown')
+        return f"Wrote {point_count} automation points for parameter '{param_name}'."
+    except Exception as e:
+        logger.error(f"Error writing automation: {str(e)}")
+        return f"Error writing automation: {str(e)}"
+
+@mcp.tool()
 def create_midi_track(ctx: Context, index: int = -1) -> str:
     """
     Create a new MIDI track in the Ableton session.

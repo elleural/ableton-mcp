@@ -227,6 +227,10 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_track_info":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_track_info(track_index)
+            elif command_type == "get_device_details":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 0)
+                response["result"] = self._get_device_details(track_index, device_index)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
@@ -1036,6 +1040,29 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error getting device parameters: " + str(e))
+            raise
+
+    def _get_device_details(self, track_index, device_index):
+        """Get detailed information about a specific device."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+            device = track.devices[device_index]
+
+            details = {
+                "name": device.name,
+                "class_name": device.class_name,
+                "type": self._get_device_type(device),
+                "can_have_chains": device.can_have_chains,
+                "can_have_drum_pads": device.can_have_drum_pads
+            }
+            return details
+        except Exception as e:
+            self.log_message("Error getting device details: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

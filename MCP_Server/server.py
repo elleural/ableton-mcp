@@ -517,6 +517,26 @@ def set_clip_name(ctx: Context, track_index: int, clip_index: int, name: str) ->
         return f"Error setting clip name: {str(e)}"
 
 @mcp.tool()
+def get_clip_info(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Get detailed information about a specific clip.
+
+    Parameters:
+    - track_index: The index of the track containing the clip.
+    - clip_index: The index of the clip slot.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_clip_info", {
+            "track_index": track_index,
+            "clip_index": clip_index
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting clip info: {str(e)}")
+        return f"Error getting clip info: {str(e)}"
+
+@mcp.tool()
 def set_tempo(ctx: Context, tempo: float) -> str:
     """
     Set the tempo of the Ableton session.

@@ -235,6 +235,10 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 device_name = params.get("device_name", "")
                 response["result"] = self._find_device_by_name(track_index, device_name)
+            elif command_type == "get_clip_info":
+                track_index = params.get("track_index", 0)
+                clip_index = params.get("clip_index", 0)
+                response["result"] = self._get_clip_info(track_index, clip_index)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
@@ -1093,6 +1097,40 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error finding device by name: " + str(e))
+            raise
+
+    def _get_clip_info(self, track_index, clip_index):
+        """Get detailed information about a specific clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+
+            if not clip_slot.has_clip:
+                return { "has_clip": False }
+
+            clip = clip_slot.clip
+
+            clip_details = {
+                "has_clip": True,
+                "name": clip.name,
+                "color": clip.color,
+                "is_looping": clip.looping,
+                "loop_start": clip.loop_start,
+                "loop_end": clip.loop_end,
+                "start_marker": clip.start_marker,
+                "end_marker": clip.end_marker,
+                "signature_numerator": clip.signature_numerator,
+                "signature_denominator": clip.signature_denominator,
+                "is_playing": clip.is_playing,
+            }
+            return clip_details
+        except Exception as e:
+            self.log_message("Error getting clip info: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

@@ -137,6 +137,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Get detailed information about devices (including identifying Max for Live devices)
 - Modify Max for Live device files by changing default parameter values
 - Find devices on a track by name
+- Get detailed information about clips
 
 ## Example Commands
 
@@ -163,6 +164,7 @@ Here are some examples of what you can ask Claude to do:
 - "Create a filter sweep automation on the first device of track 1"
 - "Get details about the first device on track 1"
 - "Find the 'Operator' synth on track 1"
+- "Get details for the clip in track 1, slot 1"
 
 ## Advanced Example Commands
 

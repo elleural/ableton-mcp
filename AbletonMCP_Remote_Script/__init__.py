@@ -231,6 +231,10 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 device_index = params.get("device_index", 0)
                 response["result"] = self._get_device_details(track_index, device_index)
+            elif command_type == "find_device_by_name":
+                track_index = params.get("track_index", 0)
+                device_name = params.get("device_name", "")
+                response["result"] = self._find_device_by_name(track_index, device_name)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
@@ -1063,6 +1067,32 @@ class AbletonMCP(ControlSurface):
             return details
         except Exception as e:
             self.log_message("Error getting device details: " + str(e))
+            raise
+
+    def _find_device_by_name(self, track_index, device_name):
+        """Find a device on a track by its name."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            for index, device in enumerate(track.devices):
+                if device.name.lower() == device_name.lower():
+                    return {
+                        "found": True,
+                        "track_index": track_index,
+                        "device_index": index,
+                        "device_name": device.name
+                    }
+
+            # If no device is found
+            return {
+                "found": False,
+                "track_index": track_index,
+                "device_name": device_name
+            }
+        except Exception as e:
+            self.log_message("Error finding device by name: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

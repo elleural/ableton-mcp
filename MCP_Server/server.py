@@ -666,6 +666,29 @@ def get_device_details(ctx: Context, track_index: int, device_index: int) -> str
         return f"Error getting device details: {str(e)}"
 
 @mcp.tool()
+def find_device_by_name(ctx: Context, track_index: int, device_name: str) -> str:
+    """
+    Find the index of a device on a track by its name.
+
+    Parameters:
+    - track_index: The index of the track to search on.
+    - device_name: The name of the device to find.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("find_device_by_name", {
+            "track_index": track_index,
+            "device_name": device_name
+        })
+        if result.get("found"):
+            return f"Device '{result.get('device_name')}' found at index {result.get('device_index')} on track {track_index}."
+        else:
+            return f"Device '{device_name}' not found on track {track_index}."
+    except Exception as e:
+        logger.error(f"Error finding device by name: {str(e)}")
+        return f"Error finding device by name: {str(e)}"
+
+@mcp.tool()
 def set_device_parameter(
     ctx: Context,
     track_index: int,

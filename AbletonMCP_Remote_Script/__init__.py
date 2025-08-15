@@ -242,7 +242,7 @@ class AbletonMCP(ControlSurface):
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
-                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation",
+                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message",
                                  "start_playback", "stop_playback", "load_browser_item",
                                  "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
@@ -301,6 +301,9 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "write_automation":
                             params_to_pass = params.copy()
                             result = self._write_automation(**params_to_pass)
+                        elif command_type == "show_message":
+                            message = params.get("message", "")
+                            result = self._show_message(message)
                         elif command_type == "start_playback":
                             result = self._start_playback()
                         elif command_type == "stop_playback":
@@ -1131,6 +1134,15 @@ class AbletonMCP(ControlSurface):
             return clip_details
         except Exception as e:
             self.log_message("Error getting clip info: " + str(e))
+            raise
+
+    def _show_message(self, message):
+        """Display a message in Ableton's status bar."""
+        try:
+            self.show_message(message)
+            return { "message_shown": True }
+        except Exception as e:
+            self.log_message("Error showing message: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

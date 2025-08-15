@@ -138,6 +138,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Modify Max for Live device files by changing default parameter values
 - Find devices on a track by name
 - Get detailed information about clips
+- Display custom messages in Ableton's status bar
 
 ## Example Commands
 
@@ -165,6 +166,7 @@ Here are some examples of what you can ask Claude to do:
 - "Get details about the first device on track 1"
 - "Find the 'Operator' synth on track 1"
 - "Get details for the clip in track 1, slot 1"
+- "Show a message in Ableton that says 'Hello from the AI!'"
 
 ## Advanced Example Commands
 

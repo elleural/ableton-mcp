@@ -957,6 +957,22 @@ def modify_m4l_device_default(
         logger.error(f"Error modifying M4L device: {str(e)}")
         return f"Error modifying M4L device: {str(e)}"
 
+@mcp.tool()
+def show_message(ctx: Context, message: str) -> str:
+    """
+    Display a message in Ableton's status bar.
+
+    Parameters:
+    - message: The message to display.
+    """
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("show_message", {"message": message})
+        return f"Message '{message}' shown in Ableton."
+    except Exception as e:
+        logger.error(f"Error showing message: {str(e)}")
+        return f"Error showing message: {str(e)}"
+
 # Main execution
 def main():
     """Run the MCP server"""

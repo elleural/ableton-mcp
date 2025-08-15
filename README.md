@@ -135,6 +135,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Create, list, fire, and rename scenes
 - Write automation for device parameters
 - Get detailed information about devices (including identifying Max for Live devices)
+- Modify Max for Live device files by changing default parameter values
 
 ## Example Commands
 
@@ -161,6 +162,9 @@ Here are some examples of what you can ask Claude to do:
 - "Create a filter sweep automation on the first device of track 1"
 - "Get details about the first device on track 1"
 
+## Advanced Example Commands
+
+- "Take the device 'MyReverb.amxd' and create a new version at 'MyReverb_Long.amxd' where the 'Decay' parameter defaults to 5.0"
 
 ## Troubleshooting
 

@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, List, Union
+from .m4l_utils import set_parameter_default_value
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -879,6 +880,39 @@ def load_drum_kit(ctx: Context, track_index: int, rack_uri: str, kit_path: str) 
     except Exception as e:
         logger.error(f"Error loading drum kit: {str(e)}")
         return f"Error loading drum kit: {str(e)}"
+
+@mcp.tool()
+def modify_m4l_device_default(
+    ctx: Context,
+    input_filepath: str,
+    output_filepath: str,
+    parameter_name: str,
+    new_default_value: float
+) -> str:
+    """
+    Creates a new Max for Live device file with a modified default value for a parameter.
+
+    Parameters:
+    - input_filepath: The path to the source .amxd file.
+    - output_filepath: The path where the new .amxd file will be saved.
+    - parameter_name: The name of the parameter to modify (e.g., "Decay", "Filter Freq").
+    - new_default_value: The new default value for the parameter.
+    """
+    try:
+        success = set_parameter_default_value(
+            input_filepath,
+            output_filepath,
+            parameter_name,
+            new_default_value
+        )
+        if success:
+            return f"Successfully created new M4L device at '{output_filepath}' with updated default for '{parameter_name}'."
+        else:
+            # This path should ideally not be reached if set_parameter_default_value raises exceptions on failure
+            return "An unknown error occurred during device modification."
+    except Exception as e:
+        logger.error(f"Error modifying M4L device: {str(e)}")
+        return f"Error modifying M4L device: {str(e)}"
 
 # Main execution
 def main():

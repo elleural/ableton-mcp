@@ -139,6 +139,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Find devices on a track by name
 - Get detailed information about clips
 - Display custom messages in Ableton's status bar
+- Control Arrangement View locators and playback position
 
 ## Example Commands
 
@@ -167,6 +168,9 @@ Here are some examples of what you can ask Claude to do:
 - "Find the 'Operator' synth on track 1"
 - "Get details for the clip in track 1, slot 1"
 - "Show a message in Ableton that says 'Hello from the AI!'"
+- "List all locators in the arrangement"
+- "Create a new locator at beat 64"
+- "Move the playhead to beat 128"
 
 ## Advanced Example Commands
 

@@ -239,10 +239,12 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 clip_index = params.get("clip_index", 0)
                 response["result"] = self._get_clip_info(track_index, clip_index)
+            elif command_type == "list_locators":
+                response["result"] = self._list_locators()
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
-                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message",
+                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message", "create_locator", "set_song_position",
                                  "start_playback", "stop_playback", "load_browser_item",
                                  "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
@@ -298,6 +300,12 @@ class AbletonMCP(ControlSurface):
                             scene_index = params.get("scene_index", 0)
                             name = params.get("name", "")
                             result = self._rename_scene(scene_index, name)
+                        elif command_type == "create_locator":
+                            time = params.get("time", 0.0)
+                            result = self._create_locator(time)
+                        elif command_type == "set_song_position":
+                            time = params.get("time", 0.0)
+                            result = self._set_song_position(time)
                         elif command_type == "write_automation":
                             params_to_pass = params.copy()
                             result = self._write_automation(**params_to_pass)
@@ -1143,6 +1151,47 @@ class AbletonMCP(ControlSurface):
             return { "message_shown": True }
         except Exception as e:
             self.log_message("Error showing message: " + str(e))
+            raise
+
+    def _list_locators(self):
+        """Get a list of all locators (cue points) in the session."""
+        try:
+            locators = []
+            for cue_point in self._song.cue_points:
+                locators.append({
+                    "name": cue_point.name,
+                    "time": cue_point.time
+                })
+            return {
+                "locators": locators,
+                "locator_count": len(locators)
+            }
+        except Exception as e:
+            self.log_message("Error listing locators: " + str(e))
+            raise
+
+    def _create_locator(self, time):
+        """Create a new locator (cue point) at a specific time."""
+        try:
+            cue_point = self._song.create_cue_point(time)
+            return {
+                "created": True,
+                "time": cue_point.time
+            }
+        except Exception as e:
+            self.log_message("Error creating locator: " + str(e))
+            raise
+
+    def _set_song_position(self, time):
+        """Set the song's current playback time."""
+        try:
+            self._song.current_song_time = time
+            return {
+                "position_set": True,
+                "time": self._song.current_song_time
+            }
+        except Exception as e:
+            self.log_message("Error setting song position: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

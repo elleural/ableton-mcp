@@ -349,6 +349,49 @@ def rename_scene(ctx: Context, scene_index: int, name: str) -> str:
         return f"Error renaming scene: {str(e)}"
 
 @mcp.tool()
+def list_locators(ctx: Context) -> str:
+    """Get a list of all locators (cue points) in the Ableton session."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("list_locators")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error listing locators: {str(e)}")
+        return f"Error listing locators: {str(e)}"
+
+@mcp.tool()
+def create_locator(ctx: Context, time: float) -> str:
+    """
+    Create a new locator (cue point) at a specific time in the arrangement.
+
+    Parameters:
+    - time: The time in beats where the locator should be created.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("create_locator", {"time": time})
+        return f"Created new locator at beat {result.get('time')}."
+    except Exception as e:
+        logger.error(f"Error creating locator: {str(e)}")
+        return f"Error creating locator: {str(e)}"
+
+@mcp.tool()
+def set_song_position(ctx: Context, time: float) -> str:
+    """
+    Set the song's current playback time in the arrangement.
+
+    Parameters:
+    - time: The time in beats to set the playhead to.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_song_position", {"time": time})
+        return f"Song position set to beat {result.get('time')}."
+    except Exception as e:
+        logger.error(f"Error setting song position: {str(e)}")
+        return f"Error setting song position: {str(e)}"
+
+@mcp.tool()
 def write_automation(
     ctx: Context,
     track_index: int,

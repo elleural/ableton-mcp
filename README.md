@@ -174,6 +174,7 @@ Here are some examples of what you can ask Claude to do:
 - "Move the playhead to beat 128"
 - "List all return tracks"
 - "Set the first send on track 1 to 50%"
+- "Get the browser tree for instruments, up to 3 levels deep"
 
 ## Advanced Example Commands
 

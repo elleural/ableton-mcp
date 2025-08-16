@@ -386,7 +386,8 @@ class AbletonMCP(ControlSurface):
             # Add the new browser commands
             elif command_type == "get_browser_tree":
                 category_type = params.get("category_type", "all")
-                response["result"] = self.get_browser_tree(category_type)
+                max_depth = params.get("max_depth", 2)
+                response["result"] = self.get_browser_tree(category_type, max_depth)
             elif command_type == "get_browser_items_at_path":
                 path = params.get("path", "")
                 response["result"] = self.get_browser_items_at_path(path)
@@ -1306,42 +1307,35 @@ class AbletonMCP(ControlSurface):
         except:
             return "unknown"
     
-    def get_browser_tree(self, category_type="all"):
+    def get_browser_tree(self, category_type="all", max_depth=2):
         """
-        Get a simplified tree of browser categories.
+        Get a simplified tree of browser categories, with recursion.
         
         Args:
             category_type: Type of categories to get ('all', 'instruments', 'sounds', etc.)
+            max_depth: How many levels of subfolders to explore.
             
         Returns:
             Dictionary with the browser tree structure
         """
         try:
-            # Access the application's browser instance instead of creating a new one
             app = self.application()
-            if not app:
-                raise RuntimeError("Could not access Live application")
-                
-            # Check if browser is available
-            if not hasattr(app, 'browser') or app.browser is None:
+            if not app or not hasattr(app, 'browser') or app.browser is None:
                 raise RuntimeError("Browser is not available in the Live application")
             
-            # Log available browser attributes to help diagnose issues
             browser_attrs = [attr for attr in dir(app.browser) if not attr.startswith('_')]
-            self.log_message("Available browser attributes: {0}".format(browser_attrs))
             
             result = {
                 "type": category_type,
                 "categories": [],
                 "available_categories": browser_attrs
             }
-            
-            # Helper function to process a browser item and its children
-            def process_item(item, depth=0):
-                if not item:
+
+            def process_item_recursive(item, current_depth=0):
+                if not item or current_depth >= max_depth:
                     return None
                 
-                result = {
+                item_info = {
                     "name": item.name if hasattr(item, 'name') else "Unknown",
                     "is_folder": hasattr(item, 'children') and bool(item.children),
                     "is_device": hasattr(item, 'is_device') and item.is_device,
@@ -1350,75 +1344,35 @@ class AbletonMCP(ControlSurface):
                     "children": []
                 }
                 
+                if item_info["is_folder"] and current_depth < max_depth - 1:
+                    for child in item.children:
+                        child_info = process_item_recursive(child, current_depth + 1)
+                        if child_info:
+                            item_info["children"].append(child_info)
                 
-                return result
+                return item_info
             
-            # Process based on category type and available attributes
-            if (category_type == "all" or category_type == "instruments") and hasattr(app.browser, 'instruments'):
-                try:
-                    instruments = process_item(app.browser.instruments)
-                    if instruments:
-                        instruments["name"] = "Instruments"  # Ensure consistent naming
-                        result["categories"].append(instruments)
-                except Exception as e:
-                    self.log_message("Error processing instruments: {0}".format(str(e)))
+            categories_to_process = []
+            if category_type == "all":
+                categories_to_process = ['instruments', 'sounds', 'drums', 'audio_effects', 'midi_effects', 'plugins']
+            else:
+                categories_to_process = [category_type]
             
-            if (category_type == "all" or category_type == "sounds") and hasattr(app.browser, 'sounds'):
-                try:
-                    sounds = process_item(app.browser.sounds)
-                    if sounds:
-                        sounds["name"] = "Sounds"  # Ensure consistent naming
-                        result["categories"].append(sounds)
-                except Exception as e:
-                    self.log_message("Error processing sounds: {0}".format(str(e)))
-            
-            if (category_type == "all" or category_type == "drums") and hasattr(app.browser, 'drums'):
-                try:
-                    drums = process_item(app.browser.drums)
-                    if drums:
-                        drums["name"] = "Drums"  # Ensure consistent naming
-                        result["categories"].append(drums)
-                except Exception as e:
-                    self.log_message("Error processing drums: {0}".format(str(e)))
-            
-            if (category_type == "all" or category_type == "audio_effects") and hasattr(app.browser, 'audio_effects'):
-                try:
-                    audio_effects = process_item(app.browser.audio_effects)
-                    if audio_effects:
-                        audio_effects["name"] = "Audio Effects"  # Ensure consistent naming
-                        result["categories"].append(audio_effects)
-                except Exception as e:
-                    self.log_message("Error processing audio_effects: {0}".format(str(e)))
-            
-            if (category_type == "all" or category_type == "midi_effects") and hasattr(app.browser, 'midi_effects'):
-                try:
-                    midi_effects = process_item(app.browser.midi_effects)
-                    if midi_effects:
-                        midi_effects["name"] = "MIDI Effects"
-                        result["categories"].append(midi_effects)
-                except Exception as e:
-                    self.log_message("Error processing midi_effects: {0}".format(str(e)))
-            
-            # Try to process other potentially available categories
-            for attr in browser_attrs:
-                if attr not in ['instruments', 'sounds', 'drums', 'audio_effects', 'midi_effects'] and \
-                   (category_type == "all" or category_type == attr):
+            for category_name in categories_to_process:
+                if hasattr(app.browser, category_name):
                     try:
-                        item = getattr(app.browser, attr)
-                        if hasattr(item, 'children') or hasattr(item, 'name'):
-                            category = process_item(item)
-                            if category:
-                                category["name"] = attr.capitalize()
-                                result["categories"].append(category)
+                        category_root = getattr(app.browser, category_name)
+                        category_tree = process_item_recursive(category_root)
+                        if category_tree:
+                            result["categories"].append(category_tree)
                     except Exception as e:
-                        self.log_message("Error processing {0}: {1}".format(attr, str(e)))
-            
-            self.log_message("Browser tree generated for {0} with {1} root categories".format(
-                category_type, len(result['categories'])))
+                        self.log_message("Error processing category " + category_name + ": " + str(e))
+
+            self.log_message("Browser tree generated for " + category_type + " with max_depth " + str(max_depth))
             return result
             
         except Exception as e:
-            self.log_message("Error getting browser tree: {0}".format(str(e)))
+            self.log_message("Error getting browser tree: " + str(e))
             self.log_message(traceback.format_exc())
             raise
     

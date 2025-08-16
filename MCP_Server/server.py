@@ -848,17 +848,19 @@ def delete_device(ctx: Context, track_index: int, device_index: int) -> str:
         return f"Error deleting device: {str(e)}"
 
 @mcp.tool()
-def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
+def get_browser_tree(ctx: Context, category_type: str = "all", max_depth: int = 2) -> str:
     """
-    Get a hierarchical tree of browser categories from Ableton.
+    Get a hierarchical tree of browser categories from Ableton, with recursive exploration.
     
     Parameters:
-    - category_type: Type of categories to get ('all', 'instruments', 'sounds', 'drums', 'audio_effects', 'midi_effects')
+    - category_type: Type of categories to get ('all', 'instruments', 'sounds', 'drums', 'audio_effects', 'midi_effects', 'plugins').
+    - max_depth: How many levels of subfolders to explore. Defaults to 2.
     """
     try:
         ableton = get_ableton_connection()
         result = ableton.send_command("get_browser_tree", {
-            "category_type": category_type
+            "category_type": category_type,
+            "max_depth": max_depth
         })
         
         # Check if we got any categories

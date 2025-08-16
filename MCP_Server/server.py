@@ -360,6 +360,39 @@ def list_locators(ctx: Context) -> str:
         return f"Error listing locators: {str(e)}"
 
 @mcp.tool()
+def list_return_tracks(ctx: Context) -> str:
+    """Get a list of all return tracks in the Ableton session."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("list_return_tracks")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error listing return tracks: {str(e)}")
+        return f"Error listing return tracks: {str(e)}"
+
+@mcp.tool()
+def set_send_level(ctx: Context, track_index: int, send_index: int, level: float) -> str:
+    """
+    Set the send level for a track.
+
+    Parameters:
+    - track_index: The index of the track to modify.
+    - send_index: The index of the send to modify (corresponds to the return track index).
+    - level: The new send level (0.0 to 1.0).
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_send_level", {
+            "track_index": track_index,
+            "send_index": send_index,
+            "level": level
+        })
+        return f"Set send {send_index} on track {track_index} to {result.get('new_level')}."
+    except Exception as e:
+        logger.error(f"Error setting send level: {str(e)}")
+        return f"Error setting send level: {str(e)}"
+
+@mcp.tool()
 def create_locator(ctx: Context, time: float) -> str:
     """
     Create a new locator (cue point) at a specific time in the arrangement.

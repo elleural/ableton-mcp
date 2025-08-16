@@ -140,6 +140,7 @@ Once the config file has been set on Claude, and the remote script is running in
 - Get detailed information about clips
 - Display custom messages in Ableton's status bar
 - Control Arrangement View locators and playback position
+- Control track sends and list return tracks
 
 ## Example Commands
 
@@ -171,6 +172,8 @@ Here are some examples of what you can ask Claude to do:
 - "List all locators in the arrangement"
 - "Create a new locator at beat 64"
 - "Move the playhead to beat 128"
+- "List all return tracks"
+- "Set the first send on track 1 to 50%"
 
 ## Advanced Example Commands
 

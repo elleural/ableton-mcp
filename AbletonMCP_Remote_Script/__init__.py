@@ -241,10 +241,12 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_clip_info(track_index, clip_index)
             elif command_type == "list_locators":
                 response["result"] = self._list_locators()
+            elif command_type == "list_return_tracks":
+                response["result"] = self._list_return_tracks()
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "create_audio_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
-                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message", "create_locator", "set_song_position",
+                                 "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message", "create_locator", "set_song_position", "set_send_level",
                                  "start_playback", "stop_playback", "load_browser_item",
                                  "get_device_parameters", "set_device_parameter", "delete_device"]:
                 # Use a thread-safe approach with a response queue
@@ -306,6 +308,11 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_song_position":
                             time = params.get("time", 0.0)
                             result = self._set_song_position(time)
+                        elif command_type == "set_send_level":
+                            track_index = params.get("track_index", 0)
+                            send_index = params.get("send_index", 0)
+                            level = params.get("level", 0.0)
+                            result = self._set_send_level(track_index, send_index, level)
                         elif command_type == "write_automation":
                             params_to_pass = params.copy()
                             result = self._write_automation(**params_to_pass)
@@ -1168,6 +1175,46 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error listing locators: " + str(e))
+            raise
+
+    def _list_return_tracks(self):
+        """Get a list of all return tracks in the session."""
+        try:
+            return_tracks = []
+            for index, track in enumerate(self._song.return_tracks):
+                return_tracks.append({
+                    "index": index,
+                    "name": track.name
+                })
+            return {
+                "return_tracks": return_tracks,
+                "return_track_count": len(return_tracks)
+            }
+        except Exception as e:
+            self.log_message("Error listing return tracks: " + str(e))
+            raise
+
+    def _set_send_level(self, track_index, send_index, level):
+        """Set the send level for a track."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            if send_index < 0 or send_index >= len(track.mixer_device.sends):
+                raise IndexError("Send index out of range")
+
+            send = track.mixer_device.sends[send_index]
+            send.value = level
+
+            return {
+                "send_set": True,
+                "track_index": track_index,
+                "send_index": send_index,
+                "new_level": send.value
+            }
+        except Exception as e:
+            self.log_message("Error setting send level: " + str(e))
             raise
 
     def _create_locator(self, time):

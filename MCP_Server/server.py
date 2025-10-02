@@ -106,7 +106,14 @@ class AbletonConnection:
             "create_midi_track", "create_audio_track", "set_track_name",
             "create_clip", "add_notes_to_clip", "set_clip_name",
             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
-            "start_playback", "stop_playback", "load_instrument_or_effect"
+            "start_playback", "stop_playback", "load_instrument_or_effect",
+            # Arrangement/transport additions
+            "set_record_mode", "continue_playing", "jump_by", "set_back_to_arranger",
+            "set_start_time", "set_metronome", "set_clip_trigger_quantization",
+            "set_loop", "set_loop_region", "play_selection", "jump_to_next_cue",
+            "jump_to_prev_cue", "toggle_cue_at_current", "re_enable_automation",
+            "set_arrangement_overdub", "set_session_automation_record",
+            "trigger_session_record", "create_locator", "set_song_position", "set_send_level"
         ]
         
         try:
@@ -423,6 +430,181 @@ def set_song_position(ctx: Context, time: float) -> str:
     except Exception as e:
         logger.error(f"Error setting song position: {str(e)}")
         return f"Error setting song position: {str(e)}"
+
+# Arrangement and transport tools
+
+@mcp.tool()
+def set_record_mode(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_record_mode", {"on": on})
+        return f"Record mode set to {result.get('record_mode')}"
+    except Exception as e:
+        logger.error(f"Error setting record mode: {str(e)}")
+        return f"Error setting record mode: {str(e)}"
+
+@mcp.tool()
+def continue_playing(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("continue_playing")
+        return "Continuing playback"
+    except Exception as e:
+        logger.error(f"Error continuing playback: {str(e)}")
+        return f"Error continuing playback: {str(e)}"
+
+@mcp.tool()
+def jump_by(ctx: Context, beats: float) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("jump_by", {"beats": beats})
+        return f"Jumped by {beats} beats"
+    except Exception as e:
+        logger.error(f"Error jumping by: {str(e)}")
+        return f"Error jumping by: {str(e)}"
+
+@mcp.tool()
+def set_back_to_arranger(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_back_to_arranger", {"on": on})
+        return f"Back to Arranger set to {result.get('back_to_arranger')}"
+    except Exception as e:
+        logger.error(f"Error setting Back to Arranger: {str(e)}")
+        return f"Error setting Back to Arranger: {str(e)}"
+
+@mcp.tool()
+def set_start_time(ctx: Context, beats: float) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_start_time", {"beats": beats})
+        return f"Start time set to {result.get('start_time')}"
+    except Exception as e:
+        logger.error(f"Error setting start time: {str(e)}")
+        return f"Error setting start time: {str(e)}"
+
+@mcp.tool()
+def set_metronome(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_metronome", {"on": on})
+        return f"Metronome set to {result.get('metronome')}"
+    except Exception as e:
+        logger.error(f"Error setting metronome: {str(e)}")
+        return f"Error setting metronome: {str(e)}"
+
+@mcp.tool()
+def set_clip_trigger_quantization(ctx: Context, quant: int) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_clip_trigger_quantization", {"quant": quant})
+        return f"Clip trigger quantization set to {result.get('clip_trigger_quantization')}"
+    except Exception as e:
+        logger.error(f"Error setting clip trigger quantization: {str(e)}")
+        return f"Error setting clip trigger quantization: {str(e)}"
+
+@mcp.tool()
+def set_loop(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_loop", {"on": on})
+        return f"Loop set to {result.get('loop')}"
+    except Exception as e:
+        logger.error(f"Error setting loop: {str(e)}")
+        return f"Error setting loop: {str(e)}"
+
+@mcp.tool()
+def set_loop_region(ctx: Context, start: float, length: float) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_loop_region", {"start": start, "length": length})
+        return f"Loop region set to start {result.get('loop_start')} length {result.get('loop_length')}"
+    except Exception as e:
+        logger.error(f"Error setting loop region: {str(e)}")
+        return f"Error setting loop region: {str(e)}"
+
+@mcp.tool()
+def play_selection(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("play_selection")
+        return "Playing selection"
+    except Exception as e:
+        logger.error(f"Error playing selection: {str(e)}")
+        return f"Error playing selection: {str(e)}"
+
+@mcp.tool()
+def jump_to_next_cue(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("jump_to_next_cue")
+        return "Jumped to next cue"
+    except Exception as e:
+        logger.error(f"Error jumping to next cue: {str(e)}")
+        return f"Error jumping to next cue: {str(e)}"
+
+@mcp.tool()
+def jump_to_prev_cue(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("jump_to_prev_cue")
+        return "Jumped to previous cue"
+    except Exception as e:
+        logger.error(f"Error jumping to previous cue: {str(e)}")
+        return f"Error jumping to previous cue: {str(e)}"
+
+@mcp.tool()
+def toggle_cue_at_current(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("toggle_cue_at_current")
+        return "Toggled cue at current position"
+    except Exception as e:
+        logger.error(f"Error toggling cue: {str(e)}")
+        return f"Error toggling cue: {str(e)}"
+
+@mcp.tool()
+def re_enable_automation(ctx: Context) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("re_enable_automation")
+        return "Re-enabled automation"
+    except Exception as e:
+        logger.error(f"Error re-enabling automation: {str(e)}")
+        return f"Error re-enabling automation: {str(e)}"
+
+@mcp.tool()
+def set_arrangement_overdub(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_arrangement_overdub", {"on": on})
+        return f"Arrangement overdub set to {result.get('arrangement_overdub')}"
+    except Exception as e:
+        logger.error(f"Error setting arrangement overdub: {str(e)}")
+        return f"Error setting arrangement overdub: {str(e)}"
+
+@mcp.tool()
+def set_session_automation_record(ctx: Context, on: bool) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_session_automation_record", {"on": on})
+        return f"Session automation record set to {result.get('session_automation_record')}"
+    except Exception as e:
+        logger.error(f"Error setting session automation record: {str(e)}")
+        return f"Error setting session automation record: {str(e)}"
+
+@mcp.tool()
+def trigger_session_record(ctx: Context, record_length: float = None) -> str:
+    try:
+        ableton = get_ableton_connection()
+        params = {}
+        if record_length is not None:
+            params["record_length"] = record_length
+        ableton.send_command("trigger_session_record", params)
+        return "Triggered session record"
+    except Exception as e:
+        logger.error(f"Error triggering session record: {str(e)}")
+        return f"Error triggering session record: {str(e)}"
 
 @mcp.tool()
 def write_automation(

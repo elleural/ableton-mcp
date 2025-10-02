@@ -248,7 +248,14 @@ class AbletonMCP(ControlSurface):
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
                                  "set_tempo", "fire_clip", "stop_clip", "fire_scene", "create_scene", "rename_scene", "write_automation", "show_message", "create_locator", "set_song_position", "set_send_level",
                                  "start_playback", "stop_playback", "load_browser_item",
-                                 "get_device_parameters", "set_device_parameter", "delete_device"]:
+                                 "get_device_parameters", "set_device_parameter", "delete_device",
+                                 # Arrangement/transport additions
+                                 "set_record_mode", "continue_playing", "jump_by", "set_back_to_arranger",
+                                 "set_start_time", "set_metronome", "set_clip_trigger_quantization",
+                                 "set_loop", "set_loop_region", "play_selection", "jump_to_next_cue",
+                                 "jump_to_prev_cue", "toggle_cue_at_current", "re_enable_automation",
+                                 "set_arrangement_overdub", "set_session_automation_record",
+                                 "trigger_session_record"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -331,6 +338,52 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             item_uri = params.get("item_uri", "")
                             result = self._load_browser_item(track_index, item_uri)
+                        elif command_type == "set_record_mode":
+                            on = params.get("on", False)
+                            result = self._set_record_mode(on)
+                        elif command_type == "continue_playing":
+                            result = self._continue_playing()
+                        elif command_type == "jump_by":
+                            beats = params.get("beats", 0.0)
+                            result = self._jump_by(beats)
+                        elif command_type == "set_back_to_arranger":
+                            on = params.get("on", False)
+                            result = self._set_back_to_arranger(on)
+                        elif command_type == "set_start_time":
+                            beats = params.get("beats", 0.0)
+                            result = self._set_start_time(beats)
+                        elif command_type == "set_metronome":
+                            on = params.get("on", False)
+                            result = self._set_metronome(on)
+                        elif command_type == "set_clip_trigger_quantization":
+                            quant = params.get("quant", 4)
+                            result = self._set_clip_trigger_quantization(quant)
+                        elif command_type == "set_loop":
+                            on = params.get("on", False)
+                            result = self._set_loop(on)
+                        elif command_type == "set_loop_region":
+                            start = params.get("start", 0.0)
+                            length = params.get("length", 0.0)
+                            result = self._set_loop_region(start, length)
+                        elif command_type == "play_selection":
+                            result = self._play_selection()
+                        elif command_type == "jump_to_next_cue":
+                            result = self._jump_to_next_cue()
+                        elif command_type == "jump_to_prev_cue":
+                            result = self._jump_to_prev_cue()
+                        elif command_type == "toggle_cue_at_current":
+                            result = self._toggle_cue_at_current()
+                        elif command_type == "re_enable_automation":
+                            result = self._re_enable_automation()
+                        elif command_type == "set_arrangement_overdub":
+                            on = params.get("on", False)
+                            result = self._set_arrangement_overdub(on)
+                        elif command_type == "set_session_automation_record":
+                            on = params.get("on", False)
+                            result = self._set_session_automation_record(on)
+                        elif command_type == "trigger_session_record":
+                            record_length = params.get("record_length")
+                            result = self._trigger_session_record(record_length)
                         elif command_type == "get_device_parameters":
                             track_index = params.get("track_index", 0)
                             device_index = params.get("device_index", 0)
@@ -1219,27 +1272,196 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _create_locator(self, time):
-        """Create a new locator (cue point) at a specific time."""
+        """Create a new locator (cue point) at a specific beat using LOM-compliant behavior."""
         try:
-            cue_point = self._song.create_cue_point(time)
-            return {
-                "created": True,
-                "time": cue_point.time
-            }
+            song = self._song
+            # Prefer internal create_cue_point if present (not public LOM but may exist)
+            if hasattr(song, 'create_cue_point'):
+                cue = song.create_cue_point(time)
+                return { "created": True, "time": cue.time }
+
+            epsilon = 1e-4
+            # If a cue already exists very near the requested time, just return it
+            for cp in song.cue_points:
+                if abs(cp.time - time) < epsilon:
+                    return { "created": True, "time": cp.time }
+
+            # Move the insert marker to desired time and toggle cue
+            previous_time = song.current_song_time
+            song.current_song_time = time
+            song.set_or_delete_cue()  # Creates if none at current position
+
+            # Verify and report
+            created_time = None
+            for cp in song.cue_points:
+                if abs(cp.time - time) < epsilon:
+                    created_time = cp.time
+                    break
+            if created_time is None:
+                created_time = song.current_song_time
+            # Restore previous position (non-critical)
+            try:
+                song.current_song_time = previous_time
+            except:
+                pass
+            return { "created": True, "time": created_time }
         except Exception as e:
             self.log_message("Error creating locator: " + str(e))
             raise
 
     def _set_song_position(self, time):
-        """Set the song's current playback time."""
+        """Set the song's current playback time (beats)."""
         try:
             self._song.current_song_time = time
+            measured = self._song.current_song_time
             return {
                 "position_set": True,
-                "time": self._song.current_song_time
+                "requested_time": time,
+                "time": measured
             }
         except Exception as e:
             self.log_message("Error setting song position: " + str(e))
+            raise
+
+    # Arrangement/transport helpers (LOM compliant)
+    def _set_record_mode(self, on):
+        try:
+            self._song.record_mode = bool(on)
+            return { "record_mode": self._song.record_mode }
+        except Exception as e:
+            self.log_message("Error setting record_mode: " + str(e))
+            raise
+
+    def _continue_playing(self):
+        try:
+            self._song.continue_playing()
+            return { "playing": self._song.is_playing }
+        except Exception as e:
+            self.log_message("Error continue_playing: " + str(e))
+            raise
+
+    def _jump_by(self, beats):
+        try:
+            self._song.jump_by(float(beats))
+            return { "current_song_time": self._song.current_song_time }
+        except Exception as e:
+            self.log_message("Error jump_by: " + str(e))
+            raise
+
+    def _set_back_to_arranger(self, on):
+        try:
+            self._song.back_to_arranger = bool(on)
+            return { "back_to_arranger": self._song.back_to_arranger }
+        except Exception as e:
+            self.log_message("Error setting back_to_arranger: " + str(e))
+            raise
+
+    def _set_start_time(self, beats):
+        try:
+            self._song.start_time = float(beats)
+            return { "start_time": self._song.start_time }
+        except Exception as e:
+            self.log_message("Error setting start_time: " + str(e))
+            raise
+
+    def _set_metronome(self, on):
+        try:
+            self._song.metronome = bool(on)
+            return { "metronome": self._song.metronome }
+        except Exception as e:
+            self.log_message("Error setting metronome: " + str(e))
+            raise
+
+    def _set_clip_trigger_quantization(self, quant):
+        try:
+            self._song.clip_trigger_quantization = int(quant)
+            return { "clip_trigger_quantization": self._song.clip_trigger_quantization }
+        except Exception as e:
+            self.log_message("Error setting clip_trigger_quantization: " + str(e))
+            raise
+
+    def _set_loop(self, on):
+        try:
+            self._song.loop = bool(on)
+            return { "loop": self._song.loop }
+        except Exception as e:
+            self.log_message("Error setting loop: " + str(e))
+            raise
+
+    def _set_loop_region(self, start, length):
+        try:
+            self._song.loop_start = float(start)
+            self._song.loop_length = float(length)
+            return { "loop_start": self._song.loop_start, "loop_length": self._song.loop_length }
+        except Exception as e:
+            self.log_message("Error setting loop region: " + str(e))
+            raise
+
+    def _play_selection(self):
+        try:
+            self._song.play_selection()
+            return { "playing": self._song.is_playing }
+        except Exception as e:
+            self.log_message("Error play_selection: " + str(e))
+            raise
+
+    def _jump_to_next_cue(self):
+        try:
+            self._song.jump_to_next_cue()
+            return { "current_song_time": self._song.current_song_time }
+        except Exception as e:
+            self.log_message("Error jump_to_next_cue: " + str(e))
+            raise
+
+    def _jump_to_prev_cue(self):
+        try:
+            self._song.jump_to_prev_cue()
+            return { "current_song_time": self._song.current_song_time }
+        except Exception as e:
+            self.log_message("Error jump_to_prev_cue: " + str(e))
+            raise
+
+    def _toggle_cue_at_current(self):
+        try:
+            self._song.set_or_delete_cue()
+            return { "toggled": True }
+        except Exception as e:
+            self.log_message("Error set_or_delete_cue: " + str(e))
+            raise
+
+    def _re_enable_automation(self):
+        try:
+            self._song.re_enable_automation()
+            return { "re_enabled": True }
+        except Exception as e:
+            self.log_message("Error re_enable_automation: " + str(e))
+            raise
+
+    def _set_arrangement_overdub(self, on):
+        try:
+            self._song.arrangement_overdub = bool(on)
+            return { "arrangement_overdub": self._song.arrangement_overdub }
+        except Exception as e:
+            self.log_message("Error setting arrangement_overdub: " + str(e))
+            raise
+
+    def _set_session_automation_record(self, on):
+        try:
+            self._song.session_automation_record = bool(on)
+            return { "session_automation_record": self._song.session_automation_record }
+        except Exception as e:
+            self.log_message("Error setting session_automation_record: " + str(e))
+            raise
+
+    def _trigger_session_record(self, record_length=None):
+        try:
+            if record_length is None:
+                self._song.trigger_session_record()
+            else:
+                self._song.trigger_session_record(record_length)
+            return { "session_record_triggered": True }
+        except Exception as e:
+            self.log_message("Error trigger_session_record: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

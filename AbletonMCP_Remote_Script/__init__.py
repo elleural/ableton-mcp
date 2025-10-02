@@ -1595,65 +1595,28 @@ class AbletonMCP(ControlSurface):
             if not slot.has_clip:
                 raise ValueError("No clip in the specified slot.")
 
-            # Snapshot pre-existing arrangement clips around the target start time
-            pre_clips = list(getattr(track, 'arrangement_clips', []))
-            pre_start_times = set([getattr(c, 'start_time', -9999.0) for c in pre_clips])
-
             # Perform duplication using Track API
             try:
-                new_clip_obj = track.duplicate_clip_to_arrangement(slot.clip, float(start_beats))
+                new_arrangement_clip = track.duplicate_clip_to_arrangement(slot.clip, float(start_beats))
             except Exception as e:
                 # Keep a helpful error message matching the LOM docs
                 raise RuntimeError("Track.duplicate_clip_to_arrangement failed: {0}".format(str(e)))
 
-            # Try to resolve the new arrangement clip
-            new_arrangement_clip = None
             # If API returned the new clip use it
-            if new_clip_obj is not None:
-                new_arrangement_clip = new_clip_obj
-            else:
-                # Find a clip whose start_time matches and wasn't present before
-                post_clips = list(getattr(track, 'arrangement_clips', []))
-                epsilon = 1e-4
-                for c in post_clips:
-                    st = getattr(c, 'start_time', None)
-                    if st is None:
-                        continue
-                    if st not in pre_start_times and abs(st - float(start_beats)) < epsilon:
-                        new_arrangement_clip = c
-                        break
-                # Fallback: choose the nearest clip to requested start
-                if new_arrangement_clip is None and post_clips:
-                    new_arrangement_clip = min(post_clips, key=lambda c: abs(getattr(c, 'start_time', 1e9) - float(start_beats)))
+            if new_arrangement_clip is not None:
+                new_arrangement_clip.looping = True
+                new_arrangement_clip.loop_start = start_beats
+                new_arrangement_clip.loop_end = start_beats + length_beats
 
-            if new_arrangement_clip is None:
-                raise RuntimeError("Failed to locate new arrangement clip after duplication")
-
-            # Set looping/length
-            if length_beats is not None and float(length_beats) > 0.0:
-                if loop is True:
-                    try:
-                        new_arrangement_clip.looping = True
-                        # loop_start in arrangement domain is usually clip start
-                        new_arrangement_clip.loop_start = float(start_beats)
-                        new_arrangement_clip.loop_end = float(start_beats) + float(length_beats)
-                    except Exception:
-                        # Fallback to non-looping end_time if loop props aren't available
-                        new_arrangement_clip.looping = False
-                        new_arrangement_clip.end_time = float(start_beats) + float(length_beats)
-                else:
-                    # Default: non-looping clip with explicit end_time
-                    try:
-                        new_arrangement_clip.looping = False
-                    except Exception:
-                        pass
-                    new_arrangement_clip.end_time = float(start_beats) + float(length_beats)
-
+            # Diagnostics-only: return clip state without mutating properties
             result = {
                 "track_index": track_index,
+                "arrangement_clip_id": getattr(new_arrangement_clip, 'id', None),
                 "start_time": getattr(new_arrangement_clip, 'start_time', float(start_beats)),
-                "end_time": getattr(new_arrangement_clip, 'end_time', float(start_beats) + float(length_beats) if length_beats else None),
-                "looping": getattr(new_arrangement_clip, 'looping', False)
+                "end_time": getattr(new_arrangement_clip, 'end_time', None),
+                "looping": getattr(new_arrangement_clip, 'looping', None),
+                "loop_start": getattr(new_arrangement_clip, 'loop_start', None),
+                "loop_end": getattr(new_arrangement_clip, 'loop_end', None)
             }
             return result
         except Exception as e:

@@ -257,7 +257,7 @@ class AbletonMCP(ControlSurface):
                                  "set_arrangement_overdub", "set_session_automation_record",
                                  "trigger_session_record",
                                  # New arrangement layout helpers
-                                 "duplicate_session_clip_to_arrangement", "clear_arrangement",
+                                 "duplicate_track_clip_to_arrangement", "clear_arrangement",
                                  "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
                                  "jump_to_cue", "jump_by_beats"]:
                 # Use a thread-safe approach with a response queue
@@ -393,13 +393,13 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "trigger_session_record":
                             record_length = params.get("record_length")
                             result = self._trigger_session_record(record_length)
-                        elif command_type == "duplicate_session_clip_to_arrangement":
+                        elif command_type == "duplicate_track_clip_to_arrangement":
                             track_index = params.get("track_index", 0)
                             clip_index = params.get("clip_index", 0)
                             start_beats = params.get("start_beats", 0.0)
                             length_beats = params.get("length_beats", 0.0)
                             loop = params.get("loop")
-                            result = self._duplicate_session_clip_to_arrangement(track_index, clip_index, start_beats, length_beats, loop)
+                            result = self._duplicate_track_clip_to_arrangement(track_index, clip_index, start_beats, length_beats, loop)
                         elif command_type == "clear_arrangement":
                             track_indices = params.get("track_indices")
                             result = self._clear_arrangement(track_indices)
@@ -1579,7 +1579,7 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error clearing arrangement: " + str(e))
             raise
 
-    def _duplicate_session_clip_to_arrangement(self, track_index, clip_index, start_beats, length_beats, loop=None):
+    def _duplicate_track_clip_to_arrangement(self, track_index, clip_index, start_beats, length_beats, loop=None):
         """Duplicate a Session clip to Arrangement using Track.duplicate_clip_to_arrangement.
 
         This uses the documented API on Track rather than Clip. After duplication,

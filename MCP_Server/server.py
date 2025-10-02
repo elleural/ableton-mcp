@@ -115,7 +115,7 @@ class AbletonConnection:
             "set_arrangement_overdub", "set_session_automation_record",
             "trigger_session_record", "create_locator", "set_song_position", "set_send_level",
             # New arrangement layout helpers
-            "duplicate_session_clip_to_arrangement", "clear_arrangement",
+            "duplicate_track_clip_to_arrangement", "clear_arrangement",
             "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
             "jump_to_cue", "jump_by_beats"
         ]
@@ -1107,7 +1107,7 @@ def clear_arrangement(ctx: Context, track_indices: List[int] = None) -> str:
         return f"Error clearing arrangement: {str(e)}"
 
 @mcp.tool()
-def duplicate_session_clip_to_arrangement(
+def duplicate_track_clip_to_arrangement(
     ctx: Context,
     track_index: int,
     clip_index: int,
@@ -1128,7 +1128,7 @@ def duplicate_session_clip_to_arrangement(
         }
         if loop is not None:
             params["loop"] = loop
-        result = ableton.send_command("duplicate_session_clip_to_arrangement", params)
+        result = ableton.send_command("duplicate_track_clip_to_arrangement", params)
         return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"Error duplicating session clip to arrangement: {str(e)}")

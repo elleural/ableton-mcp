@@ -188,8 +188,9 @@ Once the config file has been set on Claude, and the remote script is running in
   - **Example**: "Play selection."
 - `clear_arrangement(track_indices: List[int] = None)`: Delete all arrangement clips on specified tracks (or all).
   - **Example**: "Clear arrangement on tracks 0 and 1."
-- `duplicate_track_clip_to_arrangement(track_index: int, clip_index: int, start_beats: float, length_beats: float, loop: bool = false)`: Duplicate a Session clip to Arrangement, set length, optionally loop.
-  - **Example**: "Duplicate clip 1 from track 5 to beat 32 for 64 beats and loop it."
+- `duplicate_track_clip_to_arrangement(track_index: int, clip_index: int, start_beats: float, length_beats: float, loop: bool = false)`: Duplicate a Session clip to the Arrangement at the given beat. Returns diagnostics for the new Arrangement clip (including `is_arrangement_clip`, `start_marker`, `end_marker`, `looping`, `loop_start`, `loop_end`). Note: `Clip.end_time` is read-only on Arrangement clips; adjust length via `end_marker` for non-looped clips or `loop_start`/`loop_end` when looping is enabled per the LOM docs.
+  - **Reference**: `Clip.end_time` (read-only) — see [Cycling '74 LOM: Clip.end_time](https://docs.cycling74.com/apiref/lom/clip/#end_time)
+  - **Example**: "Duplicate clip 1 from track 5 to beat 32, then inspect returned `loop_*`/markers."
 
 ### Tracks
 - `get_track_info(track_index: int)`: Get detailed information about a specific track.

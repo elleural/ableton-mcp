@@ -209,6 +209,301 @@ Once the config file has been set on Claude, and the remote script is running in
 - `set_song_position(time: float)`: Set the song's current playback time in the arrangement.
   - **Example**: "Set the song position to beat 16."
 
+### MCP Consumer Reference
+
+This section documents the MCP tools exposed by `MCP_Server/server.py` and the payloads you should send when invoking them from an MCP client.
+
+#### duplicate_session_clip_to_arrangement
+
+Duplicates a Session clip (from `Track.clip_slots[clip_index].clip`) into Arrangement at a specific beat position. After duplication, optionally configures length and looping for the new Arrangement clip.
+
+- **Tool name**: `duplicate_session_clip_to_arrangement`
+- **Parameters**:
+  - `track_index` (int, required): Index of the track that contains the Session clip.
+  - `clip_index` (int, required): Clip slot index in Session view to duplicate from.
+  - `start_beats` (float, required): Arrangement beat where the clip should be placed.
+  - `length_beats` (float, required): Desired length in beats for the resulting Arrangement clip.
+  - `loop` (bool, optional): If `true`, enables looping and sets `loop_start = start_beats` and `loop_end = start_beats + length_beats`. If `false` or omitted, sets a non-looping `end_time = start_beats + length_beats`.
+
+- **Example payloads**:
+
+```json
+{ "track_index": 5, "clip_index": 1, "start_beats": 32, "length_beats": 64, "loop": true }
+```
+
+```json
+{ "track_index": 4, "clip_index": 1, "start_beats": 32, "length_beats": 4 }
+```
+
+- **Response (formatted)**:
+
+```json
+{
+  "track_index": 5,
+  "start_time": 32.0,
+  "end_time": 96.0,
+  "looping": true
+}
+```
+
+- **Notes and limitations**:
+  - The duplication is performed via `Track.duplicate_clip_to_arrangement` on the specified track. Some Live versions/devices may return a new clip object; others may require discovering the new clip by `start_time`.
+  - On some Live versions, certain Arrangement `Clip` properties may be read-only (e.g., `loop_start`, `loop_end`, `end_time`). If setting these fails, the script falls back to setting only supported properties (e.g., disabling looping and setting `end_time`).
+  - Make sure `length_beats` is provided; the tool requires it to compute loop/end boundaries.
+
+If you encounter "property of 'Clip' object has no setter", try calling again without `loop` or use a smaller `length_beats`. If issues persist, record the clip into Arrangement as a temporary workaround.
+
+### All MCP tools: schemas and example payloads
+
+Below are all available MCP tools exposed by `MCP_Server/server.py`, with parameter schemas and minimal example payloads. Unless noted, send a JSON object with the listed fields.
+
+#### Session
+- `get_session_info`
+```json
+{}
+```
+- `set_tempo`
+```json
+{ "tempo": 120 }
+```
+- `start_playback`
+```json
+{}
+```
+- `stop_playback`
+```json
+{}
+```
+
+#### Tracks and clips
+- `get_track_info`
+```json
+{ "track_index": 0 }
+```
+- `create_midi_track`
+```json
+{ "index": -1 }
+```
+- `create_audio_track`
+```json
+{ "index": -1 }
+```
+- `set_track_name`
+```json
+{ "track_index": 0, "name": "Drums" }
+```
+- `create_clip`
+```json
+{ "track_index": 0, "clip_index": 1, "length": 4 }
+```
+- `add_notes_to_clip`
+```json
+{ "track_index": 0, "clip_index": 1, "notes": [ { "pitch": 60, "start_time": 0, "duration": 1, "velocity": 100, "mute": false } ] }
+```
+- `set_clip_name`
+```json
+{ "track_index": 0, "clip_index": 1, "name": "Intro" }
+```
+- `get_clip_info`
+```json
+{ "track_index": 0, "clip_index": 1 }
+```
+- `fire_clip`
+```json
+{ "track_index": 0, "clip_index": 1 }
+```
+- `stop_clip`
+```json
+{ "track_index": 0, "clip_index": 1 }
+```
+
+#### Devices
+- `load_instrument_or_effect`
+```json
+{ "track_index": 0, "uri": "Instruments/Operator" }
+```
+- `get_device_parameters`
+```json
+{ "track_index": 0, "device_index": 0 }
+```
+- `get_device_details`
+```json
+{ "track_index": 0, "device_index": 0 }
+```
+- `find_device_by_name`
+```json
+{ "track_index": 0, "device_name": "Operator" }
+```
+- `set_device_parameter` (provide either `parameter_index` or `parameter_name`)
+```json
+{ "track_index": 0, "device_index": 0, "value": 0.5, "parameter_name": "Filter Freq" }
+```
+- `delete_device`
+```json
+{ "track_index": 0, "device_index": 0 }
+```
+- `write_automation` (points = list of {time,value})
+```json
+{ "track_index": 0, "clip_index": 1, "device_index": 0, "points": [ { "time": 0.0, "value": 0.0 }, { "time": 4.0, "value": 1.0 } ], "parameter_name": "Filter Freq" }
+```
+
+#### Scenes
+- `list_scenes`
+```json
+{}
+```
+- `fire_scene`
+```json
+{ "scene_index": 0 }
+```
+- `create_scene`
+```json
+{ "scene_index": -1 }
+```
+- `rename_scene`
+```json
+{ "scene_index": 0, "name": "Intro" }
+```
+
+#### Browser
+- `get_browser_tree`
+```json
+{ "category_type": "all", "max_depth": 2 }
+```
+- `get_browser_items_at_path`
+```json
+{ "path": "instruments/analog" }
+```
+- `load_drum_kit`
+```json
+{ "track_index": 0, "rack_uri": "Drums/Drum Rack", "kit_path": "drums/808 core kit" }
+```
+
+#### Arrangement and transport
+- `list_locators`
+```json
+{}
+```
+- `create_locator`
+```json
+{ "time": 32 }
+```
+- `set_song_position`
+```json
+{ "time": 16 }
+```
+- `set_current_song_time_beats`
+```json
+{ "beats": 16 }
+```
+- `get_current_song_time_beats`
+```json
+{}
+```
+- `set_record_mode`
+```json
+{ "on": true }
+```
+- `continue_playing`
+```json
+{}
+```
+- `jump_by`
+```json
+{ "beats": 4 }
+```
+- `set_back_to_arranger`
+```json
+{ "on": true }
+```
+- `set_start_time`
+```json
+{ "beats": 0 }
+```
+- `set_metronome`
+```json
+{ "on": true }
+```
+- `set_clip_trigger_quantization`
+```json
+{ "quant": 4 }
+```
+- `set_loop`
+```json
+{ "on": true }
+```
+- `set_loop_region`
+```json
+{ "start": 32, "length": 16 }
+```
+- `play_selection`
+```json
+{}
+```
+- `stop_all_clips`
+```json
+{ "quantized": 1 }
+```
+- `jump_to_next_cue`
+```json
+{}
+```
+- `jump_to_prev_cue`
+```json
+{}
+```
+- `jump_to_cue`
+```json
+{ "index": 0 }
+```
+- `toggle_cue_at_current`
+```json
+{}
+```
+- `re_enable_automation`
+```json
+{}
+```
+- `set_arrangement_overdub`
+```json
+{ "on": true }
+```
+- `set_session_automation_record`
+```json
+{ "on": true }
+```
+- `trigger_session_record` (optional `record_length`)
+```json
+{ "record_length": 8 }
+```
+- `rename_cue_point`
+```json
+{ "cue_index": 0, "name": "Verse" }
+```
+- `clear_arrangement` (optional `track_indices`)
+```json
+{ "track_indices": [0,1] }
+```
+- `duplicate_session_clip_to_arrangement` (see section above)
+
+#### Misc
+- `list_return_tracks`
+```json
+{}
+```
+- `set_send_level`
+```json
+{ "track_index": 0, "send_index": 0, "level": 0.5 }
+```
+- `modify_m4l_device_default`
+```json
+{ "input_filepath": "/path/in.amxd", "output_filepath": "/path/out.amxd", "parameter_name": "Decay", "new_default_value": 5.0 }
+```
+- `show_message`
+```json
+{ "message": "Hello from MCP" }
+```
+
 ### Mixer Control
 - `list_return_tracks()`: Get a list of all return tracks in the Ableton session.
   - **Example**: "List all return tracks."

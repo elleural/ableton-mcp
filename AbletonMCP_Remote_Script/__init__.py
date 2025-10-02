@@ -1363,9 +1363,12 @@ class AbletonMCP(ControlSurface):
     def _get_current_song_time_beats(self):
         """Return current song time as float beats and bars.beats.sixteenths.ticks string."""
         try:
+            # Ableton may return a BeatTime object from get_current_beats_song_time(),
+            # which is not JSON serializable. Convert it to a string for transport.
+            beat_time = self._song.get_current_beats_song_time()
             return {
                 "current_song_time": self._song.current_song_time,
-                "beats_string": self._song.get_current_beats_song_time()
+                "beats_string": str(beat_time)
             }
         except Exception as e:
             self.log_message("Error getting current song time: " + str(e))

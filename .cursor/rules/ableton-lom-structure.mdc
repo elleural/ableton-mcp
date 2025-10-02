@@ -1,0 +1,84 @@
+---
+alwaysApply: true
+description: Ableton LOM structure map (from official diagram) with core parent/child paths and views
+---
+
+## Ableton Live Object Model – Structure Map
+
+High-level object relationships distilled from the LOM diagram. Use alongside the quick links rule and official docs: [LOM index](https://docs.cycling74.com/apiref/lom/).
+
+### Entry points
+- **live_app → Application**
+  - `view → Application.View`
+  - `control_surfaces → ControlSurface[list]`
+- **live_set → Song**
+  - `view → Song.View`
+
+### Song
+- **Collections**:
+  - `tracks → Track[list]`
+  - `visible_tracks → Track[list]`
+  - `return_tracks → Track[list]`
+  - `master_track → Track`
+  - `scenes → Scene[list]`
+  - `cue_points → CuePoint[list]`
+  - `groove_pool → GroovePool`
+- **View (Song.View)**:
+  - `selected_track → Track`
+  - `selected_scene → Scene`
+  - `selected_device → Device`
+  - `highlighted_clip_slot → ClipSlot`
+  - `detail_clip → Clip`
+
+### Scene → ClipSlot[list]
+- `clip_slots → ClipSlot[list]`
+
+### ClipSlot
+- `clip → Clip | None`
+
+### Clip
+- `view → Clip.View`
+- Common props: `name, length, loop_start, loop_end, is_playing, is_recording`
+
+### Track
+- `view → Track.View`
+- `devices → Device[list]`
+- `clip_slots → ClipSlot[list]`
+- Arrangement (version-dependent): `arrangement_clips → Clip[list]`
+- Mixer: `mixer_device → MixerDevice` (volume, panning, sends)
+
+### Device (base)
+- `parameters → DeviceParameter[list]`
+- `view → Device.View`
+- Subtypes (examples): `MaxDevice, SimplerDevice, Eq8Device, RackDevice, PluginDevice, CompressorDevice, HybridReverbDevice, WavetableDevice, SpectralResonatorDevice, ShifterDevice, RoarDevice, DriftDevice`
+
+### RackDevice
+- `chains → Chain[list]`
+- `return_chains → Chain[list]`
+- `devices → Device[list]` (per chain)
+- Drum context:
+  - `drum_pads → DrumPad[list]`
+  - `selected_drum_pad → DrumPad`
+  - `visible_drum_pads → DrumPad[list]`
+
+### Chain / DrumChain
+- `mixer_device → ChainMixerDevice / MixerDevice`
+
+### MixerDevice (on Track or Chain)
+- Selected common parameters exposed as `DeviceParameter`s (names may vary by locale/Live version):
+  - `volume, panning, sends[n], crossfader`
+  - Track-level toggles: `track_activator, solo, mute` (as applicable)
+  - Master/session: `song_tempo, cue_volume`
+  - Stereo split controls when available: `left_split_stereo, right_split_stereo`
+
+### DeviceParameter
+- Common fields: `name, value, min, max, is_quantized, value_items?`
+
+### Browser (via Application)
+- `browser.instruments, sounds, drums, audio_effects, midi_effects, plugins`
+- Items expose: `name, is_folder, is_device, is_loadable, uri, children[]`
+
+### Notes
+- The diagram denotes reference paths and selection properties via views; use `Song.View`, `Track.View`, and `Device.View` to access current selection.
+- Some properties (e.g., `arrangement_clips`) can be version-dependent or not formally documented in older releases.
+- For full details and method/property signatures, refer to the official docs: [Live Object Model](https://docs.cycling74.com/apiref/lom/).

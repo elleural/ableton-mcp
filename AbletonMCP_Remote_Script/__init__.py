@@ -337,10 +337,6 @@ class AbletonMCP(ControlSurface):
                             result = self._start_playback()
                         elif command_type == "stop_playback":
                             result = self._stop_playback()
-                        elif command_type == "load_instrument_or_effect":
-                            track_index = params.get("track_index", 0)
-                            uri = params.get("uri", "")
-                            result = self._load_instrument_or_effect(track_index, uri)
                         elif command_type == "load_browser_item":
                             track_index = params.get("track_index", 0)
                             item_uri = params.get("item_uri", "")
@@ -1581,7 +1577,11 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _duplicate_session_clip_to_arrangement(self, track_index, clip_index, start_beats, length_beats, loop=None):
-        """Duplicate a session clip into arrangement at start_beats and set length/looping."""
+        """Duplicate a Session clip to Arrangement using Track.duplicate_clip_to_arrangement.
+
+        This uses the documented API on Track rather than Clip. After duplication,
+        length/loop is set if provided.
+        """
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -1596,8 +1596,12 @@ class AbletonMCP(ControlSurface):
             pre_clips = list(getattr(track, 'arrangement_clips', []))
             pre_start_times = set([getattr(c, 'start_time', -9999.0) for c in pre_clips])
 
-            # Perform duplication
-            new_clip_obj = slot.clip.duplicate_clip_to_arrangement(float(start_beats))
+            # Perform duplication using Track API
+            try:
+                new_clip_obj = track.duplicate_clip_to_arrangement(slot.clip, float(start_beats))
+            except Exception as e:
+                # Keep a helpful error message matching the LOM docs
+                raise RuntimeError("Track.duplicate_clip_to_arrangement failed: {0}".format(str(e)))
 
             # Try to resolve the new arrangement clip
             new_arrangement_clip = None

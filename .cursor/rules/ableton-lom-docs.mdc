@@ -1,0 +1,60 @@
+---
+description: Ableton Live Object Model (LOM) API reference quick links for Ableton/Max for Live development
+---
+
+## Ableton Live Object Model (LOM) – Official API Docs
+
+Use these links to quickly open the official LOM pages while implementing features in `AbletonMCP_Remote_Script` and `MCP_Server`. Source: [LOM index](https://docs.cycling74.com/apiref/lom/).
+
+- **Root index**: https://docs.cycling74.com/apiref/lom/
+
+### API Objects
+- **Application**: https://docs.cycling74.com/apiref/lom/application/
+- **Application.View**: https://docs.cycling74.com/apiref/lom/application%5Fview/
+- **Chain**: https://docs.cycling74.com/apiref/lom/chain/
+- **ChainMixerDevice**: https://docs.cycling74.com/apiref/lom/chainmixerdevice/
+- **Clip**: https://docs.cycling74.com/apiref/lom/clip/
+- **Clip.View**: https://docs.cycling74.com/apiref/lom/clip%5Fview/
+- **ClipSlot**: https://docs.cycling74.com/apiref/lom/clipslot/
+- **CompressorDevice**: https://docs.cycling74.com/apiref/lom/compressordevice/
+- **ControlSurface**: https://docs.cycling74.com/apiref/lom/controlsurface/
+- **CuePoint**: https://docs.cycling74.com/apiref/lom/cuepoint/
+- **Device**: https://docs.cycling74.com/apiref/lom/device/
+- **Device.View**: https://docs.cycling74.com/apiref/lom/device%5Fview/
+- **DeviceIO**: https://docs.cycling74.com/apiref/lom/deviceio/
+- **DeviceParameter**: https://docs.cycling74.com/apiref/lom/deviceparameter/
+- **DriftDevice**: https://docs.cycling74.com/apiref/lom/driftdevice/
+- **DrumCellDevice**: https://docs.cycling74.com/apiref/lom/drumcelldevice/
+- **DrumChain**: https://docs.cycling74.com/apiref/lom/drumchain/
+- **DrumPad**: https://docs.cycling74.com/apiref/lom/drumpad/
+- **Eq8Device**: https://docs.cycling74.com/apiref/lom/eq8device/
+- **Eq8Device.View**: https://docs.cycling74.com/apiref/lom/eq8device%5Fview/
+- **Groove**: https://docs.cycling74.com/apiref/lom/groove/
+- **GroovePool**: https://docs.cycling74.com/apiref/lom/groovepool/
+- **HybridReverbDevice**: https://docs.cycling74.com/apiref/lom/hybridreverbdevice/
+- **LooperDevice**: https://docs.cycling74.com/apiref/lom/looperdevice/
+- **MaxDevice**: https://docs.cycling74.com/apiref/lom/maxdevice/
+- **MeldDevice**: https://docs.cycling74.com/apiref/lom/melddevice/
+- **MixerDevice**: https://docs.cycling74.com/apiref/lom/mixerdevice/
+- **PluginDevice**: https://docs.cycling74.com/apiref/lom/plugindevice/
+- **RackDevice**: https://docs.cycling74.com/apiref/lom/rackdevice/
+- **RackDevice.View**: https://docs.cycling74.com/apiref/lom/rackdevice%5Fview/
+- **RoarDevice**: https://docs.cycling74.com/apiref/lom/roardevice/
+- **Sample**: https://docs.cycling74.com/apiref/lom/sample/
+- **Scene**: https://docs.cycling74.com/apiref/lom/scene/
+- **ShifterDevice**: https://docs.cycling74.com/apiref/lom/shifterdevice/
+- **SimplerDevice**: https://docs.cycling74.com/apiref/lom/simplerdevice/
+- **SimplerDevice.View**: https://docs.cycling74.com/apiref/lom/simplerdevice%5Fview/
+- **Song**: https://docs.cycling74.com/apiref/lom/song/
+- **Song.View**: https://docs.cycling74.com/apiref/lom/song%5Fview/
+- **SpectralResonatorDevice**: https://docs.cycling74.com/apiref/lom/spectralresonatordevice/
+- **TakeLane**: https://docs.cycling74.com/apiref/lom/takelane/
+- **this_device**: https://docs.cycling74.com/apiref/lom/this%5Fdevice/
+- **Track**: https://docs.cycling74.com/apiref/lom/track/
+- **Track.View**: https://docs.cycling74.com/apiref/lom/track%5Fview/
+- **TuningSystem**: https://docs.cycling74.com/apiref/lom/tuningsystem/
+- **WavetableDevice**: https://docs.cycling74.com/apiref/lom/wavetabledevice/
+
+Notes
+- Refer to each page for properties, functions, children, and parent relationships
+- The referenced index corresponds to Live 12.3b9 per Cycling '74

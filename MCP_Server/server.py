@@ -113,7 +113,11 @@ class AbletonConnection:
             "set_loop", "set_loop_region", "play_selection", "jump_to_next_cue",
             "jump_to_prev_cue", "toggle_cue_at_current", "re_enable_automation",
             "set_arrangement_overdub", "set_session_automation_record",
-            "trigger_session_record", "create_locator", "set_song_position", "set_send_level"
+            "trigger_session_record", "create_locator", "set_song_position", "set_send_level",
+            # New arrangement layout helpers
+            "duplicate_session_clip_to_arrangement", "clear_arrangement",
+            "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
+            "jump_to_cue", "jump_by_beats"
         ]
         
         try:
@@ -431,6 +435,19 @@ def set_song_position(ctx: Context, time: float) -> str:
         logger.error(f"Error setting song position: {str(e)}")
         return f"Error setting song position: {str(e)}"
 
+@mcp.tool()
+def set_current_song_time_beats(ctx: Context, beats: float) -> str:
+    """
+    Write Song.current_song_time exactly in beats.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_current_song_time_beats", {"beats": beats})
+        return f"Current song time set to beat {result.get('time')}"
+    except Exception as e:
+        logger.error(f"Error setting current song time: {str(e)}")
+        return f"Error setting current song time: {str(e)}"
+
 # Arrangement and transport tools
 
 @mcp.tool()
@@ -534,6 +551,19 @@ def play_selection(ctx: Context) -> str:
         return f"Error playing selection: {str(e)}"
 
 @mcp.tool()
+def stop_all_clips(ctx: Context, quantized: int = 1) -> str:
+    """
+    Stop all Session clips. quantized=0 stops immediately.
+    """
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("stop_all_clips", {"quantized": quantized})
+        return "Stopped all clips"
+    except Exception as e:
+        logger.error(f"Error stopping all clips: {str(e)}")
+        return f"Error stopping all clips: {str(e)}"
+
+@mcp.tool()
 def jump_to_next_cue(ctx: Context) -> str:
     try:
         ableton = get_ableton_connection()
@@ -554,6 +584,16 @@ def jump_to_prev_cue(ctx: Context) -> str:
         return f"Error jumping to previous cue: {str(e)}"
 
 @mcp.tool()
+def jump_to_cue(ctx: Context, index: int) -> str:
+    try:
+        ableton = get_ableton_connection()
+        ableton.send_command("jump_to_cue", {"index": index})
+        return f"Jumped to cue {index}"
+    except Exception as e:
+        logger.error(f"Error jumping to cue: {str(e)}")
+        return f"Error jumping to cue: {str(e)}"
+
+@mcp.tool()
 def toggle_cue_at_current(ctx: Context) -> str:
     try:
         ableton = get_ableton_connection()
@@ -572,6 +612,19 @@ def re_enable_automation(ctx: Context) -> str:
     except Exception as e:
         logger.error(f"Error re-enabling automation: {str(e)}")
         return f"Error re-enabling automation: {str(e)}"
+
+@mcp.tool()
+def get_current_song_time_beats(ctx: Context) -> str:
+    """
+    Read back current song time in beats and formatted bars.beats.sixteenths.ticks.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_current_song_time_beats")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting current song time: {str(e)}")
+        return f"Error getting current song time: {str(e)}"
 
 @mcp.tool()
 def set_arrangement_overdub(ctx: Context, on: bool) -> str:
@@ -605,6 +658,16 @@ def trigger_session_record(ctx: Context, record_length: float = None) -> str:
     except Exception as e:
         logger.error(f"Error triggering session record: {str(e)}")
         return f"Error triggering session record: {str(e)}"
+
+@mcp.tool()
+def rename_cue_point(ctx: Context, cue_index: int, name: str) -> str:
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("rename_cue_point", {"cue_index": cue_index, "name": name})
+        return f"Renamed cue {cue_index} to '{result.get('new_name', name)}'"
+    except Exception as e:
+        logger.error(f"Error renaming cue point: {str(e)}")
+        return f"Error renaming cue point: {str(e)}"
 
 @mcp.tool()
 def write_automation(
@@ -1028,6 +1091,48 @@ def delete_device(ctx: Context, track_index: int, device_index: int) -> str:
     except Exception as e:
         logger.error(f"Error deleting device: {str(e)}")
         return f"Error deleting device: {str(e)}"
+
+@mcp.tool()
+def clear_arrangement(ctx: Context, track_indices: List[int] = None) -> str:
+    """
+    Delete all arrangement clips on specified tracks or all tracks if None.
+    """
+    try:
+        ableton = get_ableton_connection()
+        params = {"track_indices": track_indices} if track_indices is not None else {}
+        result = ableton.send_command("clear_arrangement", params)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error clearing arrangement: {str(e)}")
+        return f"Error clearing arrangement: {str(e)}"
+
+@mcp.tool()
+def duplicate_session_clip_to_arrangement(
+    ctx: Context,
+    track_index: int,
+    clip_index: int,
+    start_beats: float,
+    length_beats: float,
+    loop: bool = None
+) -> str:
+    """
+    Duplicate a Session clip to Arrangement at a given beat position and set its length/looping.
+    """
+    try:
+        ableton = get_ableton_connection()
+        params = {
+            "track_index": track_index,
+            "clip_index": clip_index,
+            "start_beats": start_beats,
+            "length_beats": length_beats
+        }
+        if loop is not None:
+            params["loop"] = loop
+        result = ableton.send_command("duplicate_session_clip_to_arrangement", params)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error duplicating session clip to arrangement: {str(e)}")
+        return f"Error duplicating session clip to arrangement: {str(e)}"
 
 @mcp.tool()
 def get_browser_tree(ctx: Context, category_type: str = "all", max_depth: int = 2) -> str:

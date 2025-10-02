@@ -255,7 +255,11 @@ class AbletonMCP(ControlSurface):
                                  "set_loop", "set_loop_region", "play_selection", "jump_to_next_cue",
                                  "jump_to_prev_cue", "toggle_cue_at_current", "re_enable_automation",
                                  "set_arrangement_overdub", "set_session_automation_record",
-                                 "trigger_session_record"]:
+                                 "trigger_session_record",
+                                 # New arrangement layout helpers
+                                 "duplicate_session_clip_to_arrangement", "clear_arrangement",
+                                 "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
+                                 "jump_to_cue", "jump_by_beats"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -315,6 +319,9 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_song_position":
                             time = params.get("time", 0.0)
                             result = self._set_song_position(time)
+                        elif command_type == "set_current_song_time_beats":
+                            beats = params.get("beats", 0.0)
+                            result = self._set_current_song_time_beats(beats)
                         elif command_type == "set_send_level":
                             track_index = params.get("track_index", 0)
                             send_index = params.get("send_index", 0)
@@ -346,6 +353,9 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "jump_by":
                             beats = params.get("beats", 0.0)
                             result = self._jump_by(beats)
+                        elif command_type == "jump_by_beats":
+                            beats = params.get("beats", 0.0)
+                            result = self._jump_by(beats)
                         elif command_type == "set_back_to_arranger":
                             on = params.get("on", False)
                             result = self._set_back_to_arranger(on)
@@ -371,6 +381,9 @@ class AbletonMCP(ControlSurface):
                             result = self._jump_to_next_cue()
                         elif command_type == "jump_to_prev_cue":
                             result = self._jump_to_prev_cue()
+                        elif command_type == "jump_to_cue":
+                            index = params.get("index", 0)
+                            result = self._jump_to_cue(index)
                         elif command_type == "toggle_cue_at_current":
                             result = self._toggle_cue_at_current()
                         elif command_type == "re_enable_automation":
@@ -384,6 +397,23 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "trigger_session_record":
                             record_length = params.get("record_length")
                             result = self._trigger_session_record(record_length)
+                        elif command_type == "duplicate_session_clip_to_arrangement":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            start_beats = params.get("start_beats", 0.0)
+                            length_beats = params.get("length_beats", 0.0)
+                            loop = params.get("loop")
+                            result = self._duplicate_session_clip_to_arrangement(track_index, clip_index, start_beats, length_beats, loop)
+                        elif command_type == "clear_arrangement":
+                            track_indices = params.get("track_indices")
+                            result = self._clear_arrangement(track_indices)
+                        elif command_type == "rename_cue_point":
+                            cue_index = params.get("cue_index", 0)
+                            name = params.get("name", "")
+                            result = self._rename_cue_point(cue_index, name)
+                        elif command_type == "stop_all_clips":
+                            quantized = params.get("quantized", 1)
+                            result = self._stop_all_clips(quantized)
                         elif command_type == "get_device_parameters":
                             track_index = params.get("track_index", 0)
                             device_index = params.get("device_index", 0)
@@ -444,6 +474,8 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_browser_items_at_path":
                 path = params.get("path", "")
                 response["result"] = self.get_browser_items_at_path(path)
+            elif command_type == "get_current_song_time_beats":
+                response["result"] = self._get_current_song_time_beats()
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -1323,6 +1355,26 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting song position: " + str(e))
             raise
 
+    def _set_current_song_time_beats(self, beats):
+        """Explicit setter for current_song_time in beats."""
+        try:
+            self._song.current_song_time = float(beats)
+            return { "time": self._song.current_song_time }
+        except Exception as e:
+            self.log_message("Error setting current_song_time: " + str(e))
+            raise
+
+    def _get_current_song_time_beats(self):
+        """Return current song time as float beats and bars.beats.sixteenths.ticks string."""
+        try:
+            return {
+                "current_song_time": self._song.current_song_time,
+                "beats_string": self._song.get_current_beats_song_time()
+            }
+        except Exception as e:
+            self.log_message("Error getting current song time: " + str(e))
+            raise
+
     # Arrangement/transport helpers (LOM compliant)
     def _set_record_mode(self, on):
         try:
@@ -1429,6 +1481,18 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error set_or_delete_cue: " + str(e))
             raise
 
+    def _jump_to_cue(self, index):
+        """Jump to a specific cue point by index by setting current_song_time."""
+        try:
+            if index < 0 or index >= len(self._song.cue_points):
+                raise IndexError("Cue index out of range")
+            time_at_cue = self._song.cue_points[index].time
+            self._song.current_song_time = time_at_cue
+            return { "current_song_time": self._song.current_song_time }
+        except Exception as e:
+            self.log_message("Error jump_to_cue: " + str(e))
+            raise
+
     def _re_enable_automation(self):
         try:
             self._song.re_enable_automation()
@@ -1462,6 +1526,131 @@ class AbletonMCP(ControlSurface):
             return { "session_record_triggered": True }
         except Exception as e:
             self.log_message("Error trigger_session_record: " + str(e))
+            raise
+
+    def _stop_all_clips(self, quantized=1):
+        """Stop all session clips with optional quantization (1 by default)."""
+        try:
+            self._song.stop_all_clips(int(quantized))
+            return { "stopped": True }
+        except Exception as e:
+            self.log_message("Error stop_all_clips: " + str(e))
+            raise
+
+    def _rename_cue_point(self, cue_index, name):
+        """Rename a cue point by index."""
+        try:
+            if cue_index < 0 or cue_index >= len(self._song.cue_points):
+                raise IndexError("Cue index out of range")
+            self._song.cue_points[cue_index].name = name
+            return { "cue_index": cue_index, "new_name": self._song.cue_points[cue_index].name }
+        except Exception as e:
+            self.log_message("Error rename_cue_point: " + str(e))
+            raise
+
+    def _clear_arrangement(self, track_indices=None):
+        """Delete all arrangement clips on specified tracks or all tracks if None."""
+        try:
+            deleted_counts = []
+            tracks_to_clear = []
+            if track_indices is None:
+                tracks_to_clear = list(self._song.tracks)
+            else:
+                for idx in track_indices:
+                    if idx < 0 or idx >= len(self._song.tracks):
+                        raise IndexError("Track index out of range: {0}".format(idx))
+                    tracks_to_clear.append(self._song.tracks[idx])
+
+            for t in tracks_to_clear:
+                # Copy list to avoid mutation during iteration
+                clips = list(getattr(t, 'arrangement_clips', []))
+                count = 0
+                for ac in clips:
+                    try:
+                        # ArrangementClip should support delete()
+                        ac.delete()
+                        count += 1
+                    except Exception as e:
+                        # Best effort; continue
+                        self.log_message("Error deleting arrangement clip: " + str(e))
+                deleted_counts.append(count)
+
+            return { "tracks_cleared": len(tracks_to_clear), "deleted_counts": deleted_counts }
+        except Exception as e:
+            self.log_message("Error clearing arrangement: " + str(e))
+            raise
+
+    def _duplicate_session_clip_to_arrangement(self, track_index, clip_index, start_beats, length_beats, loop=None):
+        """Duplicate a session clip into arrangement at start_beats and set length/looping."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            slot = track.clip_slots[clip_index]
+            if not slot.has_clip:
+                raise ValueError("No clip in the specified slot.")
+
+            # Snapshot pre-existing arrangement clips around the target start time
+            pre_clips = list(getattr(track, 'arrangement_clips', []))
+            pre_start_times = set([getattr(c, 'start_time', -9999.0) for c in pre_clips])
+
+            # Perform duplication
+            new_clip_obj = slot.clip.duplicate_clip_to_arrangement(float(start_beats))
+
+            # Try to resolve the new arrangement clip
+            new_arrangement_clip = None
+            # If API returned the new clip use it
+            if new_clip_obj is not None:
+                new_arrangement_clip = new_clip_obj
+            else:
+                # Find a clip whose start_time matches and wasn't present before
+                post_clips = list(getattr(track, 'arrangement_clips', []))
+                epsilon = 1e-4
+                for c in post_clips:
+                    st = getattr(c, 'start_time', None)
+                    if st is None:
+                        continue
+                    if st not in pre_start_times and abs(st - float(start_beats)) < epsilon:
+                        new_arrangement_clip = c
+                        break
+                # Fallback: choose the nearest clip to requested start
+                if new_arrangement_clip is None and post_clips:
+                    new_arrangement_clip = min(post_clips, key=lambda c: abs(getattr(c, 'start_time', 1e9) - float(start_beats)))
+
+            if new_arrangement_clip is None:
+                raise RuntimeError("Failed to locate new arrangement clip after duplication")
+
+            # Set looping/length
+            if length_beats is not None and float(length_beats) > 0.0:
+                if loop is True:
+                    try:
+                        new_arrangement_clip.looping = True
+                        # loop_start in arrangement domain is usually clip start
+                        new_arrangement_clip.loop_start = float(start_beats)
+                        new_arrangement_clip.loop_end = float(start_beats) + float(length_beats)
+                    except Exception:
+                        # Fallback to non-looping end_time if loop props aren't available
+                        new_arrangement_clip.looping = False
+                        new_arrangement_clip.end_time = float(start_beats) + float(length_beats)
+                else:
+                    # Default: non-looping clip with explicit end_time
+                    try:
+                        new_arrangement_clip.looping = False
+                    except Exception:
+                        pass
+                    new_arrangement_clip.end_time = float(start_beats) + float(length_beats)
+
+            result = {
+                "track_index": track_index,
+                "start_time": getattr(new_arrangement_clip, 'start_time', float(start_beats)),
+                "end_time": getattr(new_arrangement_clip, 'end_time', float(start_beats) + float(length_beats) if length_beats else None),
+                "looping": getattr(new_arrangement_clip, 'looping', False)
+            }
+            return result
+        except Exception as e:
+            self.log_message("Error duplicating clip to arrangement: " + str(e))
             raise
 
     def _set_device_parameter(self, track_index, device_index, value, parameter_index=None, parameter_name=None):

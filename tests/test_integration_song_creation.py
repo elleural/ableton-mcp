@@ -94,6 +94,30 @@ def test_create_song_from_scratch_flow(connection: AbletonConnection) -> None:
     assert isinstance(set_name, dict)
 
 
+def test_application_info_and_version(connection: AbletonConnection) -> None:
+    conn = connection
+    info = conn.send_command("get_application_info")
+    assert isinstance(info, dict)
+    assert "control_surface_count" in info
+    assert "average_process_usage" in info
+
+    proc = conn.send_command("get_application_process_usage")
+    assert isinstance(proc, dict)
+    assert "average_process_usage" in proc
+    assert "peak_process_usage" in proc
+
+    version = conn.send_command("get_application_version")
+    assert isinstance(version, dict)
+    # version fields may be None depending on Live/permissions, but keys should exist
+    for key in ["version_string", "major", "minor", "bugfix"]:
+        assert key in version
+
+    document = conn.send_command("get_application_document")
+    assert isinstance(document, dict)
+    assert "track_count" in document
+    assert "scene_count" in document
+
+
 def _assert_duplicate_result_shape(result: Dict[str, Any]) -> None:
     # Check minimal expected structure and types
     # These keys are expected per README and server intent

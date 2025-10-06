@@ -282,6 +282,72 @@ def get_session_info(ctx: Context) -> str:
         return f"Error getting session info: {str(e)}"
 
 @mcp.tool()
+def get_application_info(ctx: Context) -> str:
+    """Get information about the Live Application (LOM Application)."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_application_info")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting application info: {str(e)}")
+        return f"Error getting application info: {str(e)}"
+
+@mcp.tool()
+def get_application_process_usage(ctx: Context) -> str:
+    """Get average and peak process usage from the Live Application."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_application_process_usage")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting application process usage: {str(e)}")
+        return f"Error getting application process usage: {str(e)}"
+
+@mcp.tool()
+def get_application_version(ctx: Context) -> str:
+    """Get version details from the Live Application (major/minor/bugfix/version_string)."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_application_version")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting application version: {str(e)}")
+        return f"Error getting application version: {str(e)}"
+
+@mcp.tool()
+def get_application_document(ctx: Context) -> str:
+    """Get a brief summary of the current Live Set via Application.get_document()."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_application_document")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting application document: {str(e)}")
+        return f"Error getting application document: {str(e)}"
+
+@mcp.tool()
+def list_control_surfaces(ctx: Context) -> str:
+    """List control surfaces configured in Live's preferences."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("list_control_surfaces")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error listing control surfaces: {str(e)}")
+        return f"Error listing control surfaces: {str(e)}"
+
+@mcp.tool()
+def press_current_dialog_button(ctx: Context, index: int) -> str:
+    """Press the button with the given index in the current Live dialog box."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("press_current_dialog_button", {"index": index})
+        return f"Pressed dialog button {result.get('index', index)}"
+    except Exception as e:
+        logger.error(f"Error pressing current dialog button: {str(e)}")
+        return f"Error pressing current dialog button: {str(e)}"
+
+@mcp.tool()
 def get_track_info(ctx: Context, track_index: int) -> str:
     """
     Get detailed information about a specific track in Ableton.

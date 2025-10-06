@@ -313,6 +313,20 @@ uvx pytest -q tests/test_integration_song_creation.py
 - `show_message(message: str)`: Display a message in Ableton's status bar.
   - **Example**: "Show the message 'Hello from the AI!' in Ableton."
 
+### Application
+- `get_application_info()`: Get high-level info about the Live Application: dialog counts, CPU usage, and control surfaces.
+  - Example: "Get application info."
+- `get_application_process_usage()`: Get average and peak process usage.
+  - Example: "Show current CPU usage."
+- `get_application_version()`: Get Live version information (major, minor, bugfix, version string).
+  - Example: "What Live version is running?"
+- `get_application_document()`: Get a brief summary of the current Live Set via `Application.get_document()`.
+  - Example: "Summarize the current set (track/scene counts)."
+- `list_control_surfaces()`: List configured control surfaces.
+  - Example: "List control surfaces."
+- `press_current_dialog_button(index: int)`: Press a button in the current Live dialog.
+  - Example: "Press 'OK' in the current dialog (index 0)."
+
 ### Mixer Control
 - `list_return_tracks()`: Get a list of all return tracks in the Ableton session.
   - **Example**: "List all return tracks."

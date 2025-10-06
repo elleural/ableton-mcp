@@ -222,6 +222,16 @@ class AbletonMCP(ControlSurface):
             # Route the command to the appropriate handler
             if command_type == "get_session_info":
                 response["result"] = self._get_session_info()
+            elif command_type == "get_application_info":
+                response["result"] = self._get_application_info()
+            elif command_type == "get_application_process_usage":
+                response["result"] = self._get_application_process_usage()
+            elif command_type == "get_application_version":
+                response["result"] = self._get_application_version()
+            elif command_type == "get_application_document":
+                response["result"] = self._get_application_document()
+            elif command_type == "list_control_surfaces":
+                response["result"] = self._list_control_surfaces()
             elif command_type == "list_scenes":
                 response["result"] = self._list_scenes()
             elif command_type == "get_track_info":
@@ -259,7 +269,9 @@ class AbletonMCP(ControlSurface):
                                  # New arrangement layout helpers
                                  "duplicate_track_clip_to_arrangement", "clear_arrangement",
                                  "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
-                                 "jump_to_cue", "jump_by_beats"]:
+                                 "jump_to_cue", "jump_by_beats",
+                                 # Application mutation
+                                 "press_current_dialog_button"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -425,6 +437,9 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             device_index = params.get("device_index", 0)
                             result = self._delete_device(track_index, device_index)
+                        elif command_type == "press_current_dialog_button":
+                            index = params.get("index", 0)
+                            result = self._press_current_dialog_button(index)
                         
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -503,6 +518,148 @@ class AbletonMCP(ControlSurface):
             return result
         except Exception as e:
             self.log_message("Error getting session info: " + str(e))
+            raise
+
+    def _get_application_info(self):
+        """Return basic information about the Live Application (LOM Application)."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+
+            info = {
+                "open_dialog_count": getattr(app, 'open_dialog_count', None),
+                "current_dialog_message": getattr(app, 'current_dialog_message', None),
+                "current_dialog_button_count": getattr(app, 'current_dialog_button_count', None),
+                "average_process_usage": getattr(app, 'average_process_usage', None),
+                "peak_process_usage": getattr(app, 'peak_process_usage', None),
+                "has_browser": bool(getattr(app, 'browser', None)),
+            }
+
+            # Control surfaces summary (names may vary; fall back to class name)
+            control_surfaces = []
+            try:
+                for cs in getattr(app, 'control_surfaces', []) or []:
+                    try:
+                        name = getattr(cs, 'name', None) or cs.__class__.__name__
+                    except Exception:
+                        name = 'UnknownControlSurface'
+                    control_surfaces.append({
+                        "class_name": cs.__class__.__name__,
+                        "name": name
+                    })
+            except Exception:
+                pass
+            info["control_surfaces"] = control_surfaces
+            info["control_surface_count"] = len(control_surfaces)
+
+            return info
+        except Exception as e:
+            self.log_message("Error getting application info: " + str(e))
+            raise
+
+    def _get_application_process_usage(self):
+        """Return CPU/process usage reported by Live Application."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            return {
+                "average_process_usage": getattr(app, 'average_process_usage', None),
+                "peak_process_usage": getattr(app, 'peak_process_usage', None)
+            }
+        except Exception as e:
+            self.log_message("Error getting application process usage: " + str(e))
+            raise
+
+    def _get_application_version(self):
+        """Return version details from Live Application."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            version = {
+                "version_string": None,
+                "major": None,
+                "minor": None,
+                "bugfix": None,
+            }
+            try:
+                version["version_string"] = app.get_version_string()
+            except Exception:
+                pass
+            try:
+                version["major"] = app.get_major_version()
+            except Exception:
+                pass
+            try:
+                version["minor"] = app.get_minor_version()
+            except Exception:
+                pass
+            try:
+                version["bugfix"] = app.get_bugfix_version()
+            except Exception:
+                pass
+            return version
+        except Exception as e:
+            self.log_message("Error getting application version: " + str(e))
+            raise
+
+    def _get_application_document(self):
+        """Return a brief summary of the current Live Set via Application.get_document()."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            doc = app.get_document()
+            # Provide a minimal, stable summary
+            return {
+                "tempo": getattr(doc, 'tempo', None),
+                "signature_numerator": getattr(doc, 'signature_numerator', None),
+                "signature_denominator": getattr(doc, 'signature_denominator', None),
+                "track_count": len(getattr(doc, 'tracks', [])),
+                "scene_count": len(getattr(doc, 'scenes', [])),
+            }
+        except Exception as e:
+            self.log_message("Error getting application document: " + str(e))
+            raise
+
+    def _list_control_surfaces(self):
+        """List control surfaces configured in Live's preferences."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            items = []
+            try:
+                for idx, cs in enumerate(getattr(app, 'control_surfaces', []) or []):
+                    try:
+                        name = getattr(cs, 'name', None) or cs.__class__.__name__
+                    except Exception:
+                        name = cs.__class__.__name__
+                    items.append({
+                        "index": idx,
+                        "class_name": cs.__class__.__name__,
+                        "name": name,
+                    })
+            except Exception:
+                pass
+            return {"control_surfaces": items, "count": len(items)}
+        except Exception as e:
+            self.log_message("Error listing control surfaces: " + str(e))
+            raise
+
+    def _press_current_dialog_button(self, index):
+        """Press a button in the current Live dialog by index (LOM Application.press_current_dialog_button)."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            idx = int(index)
+            app.press_current_dialog_button(idx)
+            return {"pressed": True, "index": idx}
+        except Exception as e:
+            self.log_message("Error pressing current dialog button: " + str(e))
             raise
     
     def _get_track_info(self, track_index):

@@ -17,8 +17,14 @@ dependencies = [
     "mcp[cli]==1.4.*",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7,<9",
+]
+
 [project.scripts]
 ableton-mcp = "MCP_Server.server:main"
+ableton-mcp-debug = "MCP_Server.debugger:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

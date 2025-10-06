@@ -1604,19 +1604,184 @@ class AbletonMCP(ControlSurface):
 
             # If API returned the new clip use it
             if new_arrangement_clip is not None:
-                new_arrangement_clip.looping = True
-                new_arrangement_clip.loop_start = start_beats
-                new_arrangement_clip.loop_end = start_beats + length_beats
+                # Collect state before changes for debugging
+                def _state_dict(c):
+                    def _g(name):
+                        try:
+                            return getattr(c, name)
+                        except Exception as _e:
+                            return "<err>"
+                    return {
+                        "start_time": _g("start_time"),
+                        "end_time": _g("end_time"),
+                        "looping": _g("looping"),
+                        "loop_start": _g("loop_start"),
+                        "loop_end": _g("loop_end"),
+                        "start_marker": _g("start_marker"),
+                        "end_marker": _g("end_marker"),
+                        "is_arrangement_clip": _g("is_arrangement_clip"),
+                        "is_session_clip": _g("is_session_clip"),
+                        "length": _g("length"),
+                    }
+
+                pre_state = _state_dict(new_arrangement_clip)
+                def _log_obj(label, obj):
+                    try:
+                        import json
+                        s = json.dumps(obj, indent=2, ensure_ascii=False)
+                        # Use larger chunks to reduce truncation in Live's status bar
+                        max_len = 600
+                        total = (len(s) + max_len - 1) // max_len
+                        for i in range(total):
+                            chunk = s[i * max_len:(i + 1) * max_len]
+                            try:
+                                self.log_message(f"{label} ({i+1}/{total}): " + chunk)
+                            except Exception:
+                                pass
+                    except Exception:
+                        try:
+                            self.log_message(f"{label}: <unprintable>")
+                        except Exception:
+                            pass
+
+                _log_obj("duplicate_to_arrangement pre", pre_state)
+
+                # Determine the source clip unit length (Session clip length)
+                try:
+                    source_unit_length = float(getattr(slot.clip, 'length', 0.0))
+                except Exception:
+                    source_unit_length = 0.0
+                if source_unit_length <= 0.0:
+                    # Fallback to requested length or 4 beats if unknown
+                    try:
+                        source_unit_length = float(length_beats)
+                    except Exception:
+                        source_unit_length = 4.0
+
+                # Set loop boundaries in a safe order to avoid
+                # "LoopStart behind LoopEnd" errors from Live.
+                # 1) Set loop_end first, then loop_start
+                # 2) Apply the desired looping state (default True if not provided)
+                desired_looping = True if loop is None else bool(loop)
+                # Arrangement clip loop markers are clip-local, not absolute.
+                # Loop the first segment in clip time: 0..segment_len
+                loop_start_value = 0.0
+                try:
+                    total_length = float(length_beats)
+                except Exception:
+                    total_length = source_unit_length
+                first_segment_len = source_unit_length if source_unit_length <= total_length else total_length
+                loop_end_value = float(first_segment_len)
+
+                if loop_end_value < loop_start_value:
+                    raise ValueError("length_beats must be positive")
+
+                # Order matters for Live: end first, then start
+                new_arrangement_clip.loop_end = loop_end_value
+                new_arrangement_clip.loop_start = loop_start_value
+                # Extend the clip in Arrangement so multiple loop cycles are visible
+                # end_marker is clip-local; set to desired total length
+                try:
+                    # Normalize markers to clip-local 0..length
+                    new_arrangement_clip.start_marker = 0.0
+                    new_arrangement_clip.end_marker = loop_end_value
+                except Exception:
+                    pass
+                new_arrangement_clip.looping = desired_looping
+
+                # If the requested total length exceeds the source unit length,
+                # create additional arrangement clips to cover the remaining range
+                created_count = 1
+                remaining = float(total_length) - float(first_segment_len)
+                while remaining > 1e-6:
+                    seg_start = float(start_beats) + created_count * float(source_unit_length)
+                    try:
+                        extra_clip = track.duplicate_clip_to_arrangement(slot.clip, seg_start)
+                    except Exception as e:
+                        raise RuntimeError("Track.duplicate_clip_to_arrangement failed: {0}".format(str(e)))
+                    if extra_clip is not None:
+                        seg_len = float(source_unit_length) if remaining >= float(source_unit_length) else float(remaining)
+                        try:
+                            extra_clip.loop_end = seg_len
+                            extra_clip.loop_start = 0.0
+                            extra_clip.start_marker = 0.0
+                            extra_clip.end_marker = seg_len
+                            extra_clip.looping = desired_looping
+                        except Exception:
+                            pass
+                        created_count += 1
+                        remaining -= seg_len
+
+                post_state = _state_dict(new_arrangement_clip)
+                _log_obj("duplicate_to_arrangement post", post_state)
 
             # Diagnostics-only: return clip state without mutating properties
+            # Try to compute a stable index of the new clip in arrangement_clips
+            arrangement_clip_index = None
+            try:
+                clips = list(track.arrangement_clips)
+                # Prefer identity match if possible
+                for i, c in enumerate(clips):
+                    try:
+                        if c == new_arrangement_clip:
+                            arrangement_clip_index = i
+                            break
+                    except Exception:
+                        pass
+                if arrangement_clip_index is None:
+                    # Fallback: match by start_time
+                    target_start = getattr(new_arrangement_clip, 'start_time', float(start_beats))
+                    for i, c in enumerate(clips):
+                        try:
+                            if abs(c.start_time - float(target_start)) < 1e-6:
+                                arrangement_clip_index = i
+                                break
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Build a full snapshot of arrangement clips on this track for debugging
+            def _clip_state(c):
+                try:
+                    return {
+                        "start_time": getattr(c, "start_time", None),
+                        "end_time": getattr(c, "end_time", None),
+                        "looping": getattr(c, "looping", None),
+                        "loop_start": getattr(c, "loop_start", None),
+                        "loop_end": getattr(c, "loop_end", None),
+                        "start_marker": getattr(c, "start_marker", None),
+                        "end_marker": getattr(c, "end_marker", None),
+                        "length": getattr(c, "length", None),
+                    }
+                except Exception:
+                    return {}
+
+            track_snapshot = []
+            try:
+                for i, c in enumerate(list(track.arrangement_clips)):
+                    s = _clip_state(c)
+                    s["index"] = i
+                    track_snapshot.append(s)
+            except Exception:
+                pass
+
             result = {
                 "track_index": track_index,
                 "arrangement_clip_id": getattr(new_arrangement_clip, 'id', None),
+                "arrangement_clip_index": arrangement_clip_index,
                 "start_time": getattr(new_arrangement_clip, 'start_time', float(start_beats)),
                 "end_time": getattr(new_arrangement_clip, 'end_time', None),
                 "looping": getattr(new_arrangement_clip, 'looping', None),
                 "loop_start": getattr(new_arrangement_clip, 'loop_start', None),
-                "loop_end": getattr(new_arrangement_clip, 'loop_end', None)
+                "loop_end": getattr(new_arrangement_clip, 'loop_end', None),
+                "debug": {
+                    "pre": pre_state if 'pre_state' in locals() else None,
+                    "post": post_state if 'post_state' in locals() else None,
+                    "track_arrangement_snapshot": track_snapshot,
+                    "created_count": created_count if 'created_count' in locals() else 1,
+                    "source_unit_length": source_unit_length if 'source_unit_length' in locals() else None,
+                }
             }
             return result
         except Exception as e:

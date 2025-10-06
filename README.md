@@ -127,6 +127,54 @@ uvx ableton-mcp
 
 Once the config file has been set on Claude, and the remote script is running in Ableton, you will see a hammer icon with tools for the Ableton MCP.
 
+### Debugger CLI
+
+A lightweight command-line debugger is provided to quickly test server commands and prototype new ones with stubs.
+
+Start a REPL:
+
+```
+uvx ableton-mcp-debug repl
+```
+
+Send a single command:
+
+```
+uvx ableton-mcp-debug send set_tempo '{"tempo": 120}'
+```
+
+Inside the REPL:
+
+- `send <command_type> [JSON_PARAMS]` — send a command, pretty-print result
+- `commands` — list known command names discovered from the server source
+- `info` — shortcut for `send get_session_info`
+- Stub controls for unimplemented commands:
+  - `stub_add <command_type> <JSON_RESPONSE>`
+  - `stub_remove <command_type>`
+  - `stub_list`
+  - `stub_clear`
+  - `stub_toggle` / `stub_on` / `stub_off`
+
+Environment:
+
+- `ABLETON_MCP_HOST` and `ABLETON_MCP_PORT` customize the target host/port (defaults: localhost:9877)
+
+### Running Tests
+
+Integration tests expect Ableton Live running with the AbletonMCP Remote Script loaded and an empty project.
+
+Run all tests:
+
+```
+uvx pytest -q
+```
+
+Only the integration suite:
+
+```
+uvx pytest -q tests/test_integration_song_creation.py
+```
+
 ## Command List
 
 ### Songs & Transport

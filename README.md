@@ -1,11 +1,7 @@
 # AbletonMCP - Ableton Live Model Context Protocol Integration
-[![smithery badge](https://smithery.ai/badge/@ahujasid/ableton-mcp)](https://smithery.ai/server/@ahujasid/ableton-mcp)
 
-AbletonMCP connects Ableton Live to Claude AI through the Model Context Protocol (MCP), allowing Claude to directly interact with and control Ableton Live. This integration enables prompt-assisted music production, track creation, and Live session manipulation.
-
-### Join the Community
-
-Give feedback, get inspired, and build on top of the MCP: [Discord](https://discord.gg/3ZrMyGKnaU). Made by [Siddharth](https://x.com/sidahuj)
+AbletonMCP connects Ableton Live to Claude AI through the Model Context Protocol (MCP), allowing Cursor/Claude to directly interact with and control Ableton Live. 
+The goal of this (forked) integration is to comprehensively support the [Ableton Live Object Model](https://docs.cycling74.com/apiref/lom/). 
 
 ## Features
 
@@ -24,7 +20,7 @@ Give feedback, get inspired, and build on top of the MCP: [Discord](https://disc
 
 ## Project History
 
-This project was created by Siddharth Ahuja and has been improved with the help of the community. The latest updates include a host of new features that significantly expand the capabilities of AbletonMCP, including:
+This project was created by Siddharth Ahuja and has been improved. The latest updates include a host of new features that significantly expand the capabilities of AbletonMCP, including:
 
 - Enhanced browser navigation with recursive exploration.
 - Scene management.

@@ -224,6 +224,8 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_session_info()
             elif command_type == "get_application_info":
                 response["result"] = self._get_application_info()
+            elif command_type == "get_application_view_state":
+                response["result"] = self._get_application_view_state()
             elif command_type == "get_application_process_usage":
                 response["result"] = self._get_application_process_usage()
             elif command_type == "get_application_version":
@@ -271,7 +273,12 @@ class AbletonMCP(ControlSurface):
                                  "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
                                  "jump_to_cue", "jump_by_beats",
                                  # Application mutation
-                                 "press_current_dialog_button"]:
+                                 "press_current_dialog_button",
+                                 # Application.View functions
+                                 "application_view_focus_view", "application_view_hide_view",
+                                 "application_view_is_view_visible", "application_view_scroll_view",
+                                 "application_view_show_view", "application_view_toggle_browse",
+                                 "application_view_zoom_view", "application_view_available_main_views"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -440,6 +447,33 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "press_current_dialog_button":
                             index = params.get("index", 0)
                             result = self._press_current_dialog_button(index)
+                        # Application.View operations
+                        elif command_type == "application_view_available_main_views":
+                            result = self._application_view_available_main_views()
+                        elif command_type == "application_view_focus_view":
+                            view_name = params.get("view_name", "")
+                            result = self._application_view_focus_view(view_name)
+                        elif command_type == "application_view_hide_view":
+                            view_name = params.get("view_name", "")
+                            result = self._application_view_hide_view(view_name)
+                        elif command_type == "application_view_is_view_visible":
+                            view_name = params.get("view_name", "")
+                            result = self._application_view_is_view_visible(view_name)
+                        elif command_type == "application_view_scroll_view":
+                            direction = int(params.get("direction", 0))
+                            view_name = params.get("view_name", "")
+                            modifier_pressed = bool(params.get("modifier_pressed", False))
+                            result = self._application_view_scroll_view(direction, view_name, modifier_pressed)
+                        elif command_type == "application_view_show_view":
+                            view_name = params.get("view_name", "")
+                            result = self._application_view_show_view(view_name)
+                        elif command_type == "application_view_toggle_browse":
+                            result = self._application_view_toggle_browse()
+                        elif command_type == "application_view_zoom_view":
+                            direction = int(params.get("direction", 0))
+                            view_name = params.get("view_name", "")
+                            modifier_pressed = bool(params.get("modifier_pressed", False))
+                            result = self._application_view_zoom_view(direction, view_name, modifier_pressed)
                         
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -558,6 +592,23 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error getting application info: " + str(e))
             raise
 
+    def _get_application_view_state(self):
+        """Return Application.View properties (browse_mode, focused_document_view)."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            return {
+                "browse_mode": getattr(view, 'browse_mode', None),
+                "focused_document_view": getattr(view, 'focused_document_view', None)
+            }
+        except Exception as e:
+            self.log_message("Error getting application view state: " + str(e))
+            raise
+
     def _get_application_process_usage(self):
         """Return CPU/process usage reported by Live Application."""
         try:
@@ -660,6 +711,128 @@ class AbletonMCP(ControlSurface):
             return {"pressed": True, "index": idx}
         except Exception as e:
             self.log_message("Error pressing current dialog button: " + str(e))
+            raise
+
+    # Application.View methods
+    def _application_view_available_main_views(self):
+        """Return list of available main view names per LOM Application.View.available_main_views."""
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            try:
+                views = view.available_main_views()
+            except Exception:
+                # Some versions expose as property
+                views = getattr(view, 'available_main_views', [])
+            # Ensure list of strings
+            try:
+                return { "views": [str(v) for v in list(views or [])] }
+            except Exception:
+                return { "views": [] }
+        except Exception as e:
+            self.log_message("Error getting available main views: " + str(e))
+            raise
+
+    def _application_view_focus_view(self, view_name):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.focus_view(view_name)
+            return { "focused_document_view": getattr(view, 'focused_document_view', None) }
+        except Exception as e:
+            self.log_message("Error focusing view: " + str(e))
+            raise
+
+    def _application_view_hide_view(self, view_name):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.hide_view(view_name)
+            return { "hidden": True, "view_name": view_name }
+        except Exception as e:
+            self.log_message("Error hiding view: " + str(e))
+            raise
+
+    def _application_view_is_view_visible(self, view_name):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            visible = bool(view.is_view_visible(view_name))
+            return { "visible": visible, "view_name": view_name }
+        except Exception as e:
+            self.log_message("Error checking view visibility: " + str(e))
+            raise
+
+    def _application_view_scroll_view(self, direction, view_name, modifier_pressed):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.scroll_view(int(direction), view_name, bool(modifier_pressed))
+            return { "scrolled": True }
+        except Exception as e:
+            self.log_message("Error scrolling view: " + str(e))
+            raise
+
+    def _application_view_show_view(self, view_name):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.show_view(view_name)
+            return { "shown": True, "view_name": view_name }
+        except Exception as e:
+            self.log_message("Error showing view: " + str(e))
+            raise
+
+    def _application_view_toggle_browse(self):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.toggle_browse()
+            return { "toggled": True }
+        except Exception as e:
+            self.log_message("Error toggling browse: " + str(e))
+            raise
+
+    def _application_view_zoom_view(self, direction, view_name, modifier_pressed):
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            view = getattr(app, 'view', None)
+            if view is None:
+                raise RuntimeError("Application.View not available")
+            view.zoom_view(int(direction), view_name, bool(modifier_pressed))
+            return { "zoomed": True }
+        except Exception as e:
+            self.log_message("Error zooming view: " + str(e))
             raise
     
     def _get_track_info(self, track_index):

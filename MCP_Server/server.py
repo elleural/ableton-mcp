@@ -117,7 +117,11 @@ class AbletonConnection:
             # New arrangement layout helpers
             "duplicate_track_clip_to_arrangement", "clear_arrangement",
             "rename_cue_point", "set_current_song_time_beats", "stop_all_clips",
-            "jump_to_cue", "jump_by_beats"
+            "jump_to_cue", "jump_by_beats",
+            # Application.View actions
+            "application_view_focus_view", "application_view_hide_view",
+            "application_view_scroll_view", "application_view_show_view",
+            "application_view_toggle_browse", "application_view_zoom_view"
         ]
         
         try:
@@ -293,6 +297,17 @@ def get_application_info(ctx: Context) -> str:
         return f"Error getting application info: {str(e)}"
 
 @mcp.tool()
+def get_application_view_state(ctx: Context) -> str:
+    """Get Application.View properties: browse_mode and focused_document_view."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_application_view_state")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting application view state: {str(e)}")
+        return f"Error getting application view state: {str(e)}"
+
+@mcp.tool()
 def get_application_process_usage(ctx: Context) -> str:
     """Get average and peak process usage from the Live Application."""
     try:
@@ -335,6 +350,96 @@ def list_control_surfaces(ctx: Context) -> str:
     except Exception as e:
         logger.error(f"Error listing control surfaces: {str(e)}")
         return f"Error listing control surfaces: {str(e)}"
+
+# Application.View tools
+
+@mcp.tool()
+def application_view_available_main_views(ctx: Context) -> str:
+    """Return list of available main view names ('Browser', 'Arranger', 'Session', etc.)."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_available_main_views")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting available main views: {str(e)}")
+        return f"Error getting available main views: {str(e)}"
+
+@mcp.tool()
+def application_view_focus_view(ctx: Context, view_name: str = "") -> str:
+    """Shows named view and focuses on it. Empty string refers to the main window view."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_focus_view", {"view_name": view_name})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error focusing view: {str(e)}")
+        return f"Error focusing view: {str(e)}"
+
+@mcp.tool()
+def application_view_hide_view(ctx: Context, view_name: str = "") -> str:
+    """Hides the named view. Empty string refers to the main window view."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_hide_view", {"view_name": view_name})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error hiding view: {str(e)}")
+        return f"Error hiding view: {str(e)}"
+
+@mcp.tool()
+def application_view_is_view_visible(ctx: Context, view_name: str) -> str:
+    """Returns whether the specified view is currently visible."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_is_view_visible", {"view_name": view_name})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error checking view visibility: {str(e)}")
+        return f"Error checking view visibility: {str(e)}"
+
+@mcp.tool()
+def application_view_scroll_view(ctx: Context, direction: int, view_name: str = "", modifier_pressed: bool = False) -> str:
+    """Scroll the specified view. direction: 0=up,1=down,2=left,3=right; modifier affects Arranger behaviour."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_scroll_view", {"direction": direction, "view_name": view_name, "modifier_pressed": modifier_pressed})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error scrolling view: {str(e)}")
+        return f"Error scrolling view: {str(e)}"
+
+@mcp.tool()
+def application_view_show_view(ctx: Context, view_name: str = "") -> str:
+    """Shows the named view."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_show_view", {"view_name": view_name})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error showing view: {str(e)}")
+        return f"Error showing view: {str(e)}"
+
+@mcp.tool()
+def application_view_toggle_browse(ctx: Context) -> str:
+    """Displays device chain and browser and toggles Hot-Swap Mode for selected device."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_toggle_browse")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error toggling browse: {str(e)}")
+        return f"Error toggling browse: {str(e)}"
+
+@mcp.tool()
+def application_view_zoom_view(ctx: Context, direction: int, view_name: str = "", modifier_pressed: bool = False) -> str:
+    """Zoom the specified view. Only Arrangement and Session can be zoomed."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("application_view_zoom_view", {"direction": direction, "view_name": view_name, "modifier_pressed": modifier_pressed})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error zooming view: {str(e)}")
+        return f"Error zooming view: {str(e)}"
 
 @mcp.tool()
 def press_current_dialog_button(ctx: Context, index: int) -> str:

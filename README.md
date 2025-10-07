@@ -323,6 +323,24 @@ uvx pytest -q tests/test_integration_song_creation.py
 - `get_application_document()`: Get a brief summary of the current Live Set via `Application.get_document()`.
   - Example: "Summarize the current set (track/scene counts)."
 - `list_control_surfaces()`: List configured control surfaces.
+  
+#### Application.View
+Following the LOM `Application.View` API, the MCP exposes properties and functions to control and query Live's UI. See official docs: [Application.View](https://docs.cycling74.com/apiref/lom/application_view/).
+
+- `get_application_view_state()`: Read `browse_mode` and `focused_document_view`.
+  - Example: "Show current browse mode and focused document view."
+- `application_view_available_main_views()`: Get the constant list of main view names.
+  - Returns items like `Browser`, `Arranger`, `Session`, `Detail`, `Detail/Clip`, `Detail/DeviceChain`.
+- `application_view_focus_view(view_name: str)`: Show/focus a named view. Empty string focuses the main window view.
+  - Example: `application_view_focus_view("Session")`
+- `application_view_show_view(view_name: str)`: Show a named view (e.g., `Browser`).
+- `application_view_hide_view(view_name: str)`: Hide a named view.
+- `application_view_is_view_visible(view_name: str)`: Check if a view is visible.
+- `application_view_scroll_view(direction: int, view_name: str = "", modifier_pressed: bool = False)`: Scroll a view.
+  - `direction`: 0=up, 1=down, 2=left, 3=right
+- `application_view_toggle_browse()`: Toggle Hot‑Swap Mode and show device chain/browser for selected device.
+- `application_view_zoom_view(direction: int, view_name: str = "", modifier_pressed: bool = False)`: Zoom a view.
+  - Only Arrangement and Session can be zoomed. For Session, zoom behaves like scroll.
   - Example: "List control surfaces."
 - `press_current_dialog_button(index: int)`: Press a button in the current Live dialog.
   - Example: "Press 'OK' in the current dialog (index 0)."

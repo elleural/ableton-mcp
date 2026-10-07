@@ -1,11 +1,12 @@
 [project]
 name = "ableton-mcp"
-version = "1.0.0"
-description = "Ableton Live integration through the Model Context Protocol"
+version = "2.0.0"
+description = "Ableton Live for AI agents over the Model Context Protocol: compose, arrange, mix, render and release"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    {name = "Siddharth Ahuja", email = "ahujasid@gmail.com"}
+    {name = "Siddharth Ahuja", email = "ahujasid@gmail.com"},
+    {name = "Frederic Laruelle"},
 ]
 license = {text = "MIT"}
 classifiers = [
@@ -14,25 +15,33 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp[cli]==1.4.*",
+    "mcp>=2.3,<3",
+    "numpy>=1.26",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest>=7,<9",
+    "pytest>=8",
 ]
 
 [project.scripts]
-ableton-mcp = "MCP_Server.server:main"
+ableton-mcp = "MCP_Server.cli:main"
 ableton-mcp-debug = "MCP_Server.debugger:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["MCP_Server"]
+[tool.setuptools.packages.find]
+# The Remote Script ships in the wheel so `ableton-mcp install` can copy it into Live from any install.
+include = ["MCP_Server*", "AbletonMCP_Remote_Script*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: needs a running Ableton Live with the AbletonMCP Remote Script loaded",
+]
 
 [project.urls]
-"Homepage" = "https://github.com/ahujasid/ableton-mcp"
-"Bug Tracker" = "https://github.com/ahujasid/ableton-mcp/issues"
+"Homepage" = "https://github.com/elleural/ableton-mcp"
+"Bug Tracker" = "https://github.com/elleural/ableton-mcp/issues"

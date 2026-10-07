@@ -26,31 +26,43 @@ from .connection import AbletonError, get_connection
 
 INSTRUCTIONS = """\
 Control Ableton Live to compose, produce, mix, master and release music. You cannot hear audio or \
-see Live's screen: read state back with get_* tools and use analyze_audio on bounced files.
+see Live's screen: read state back with get_* tools, and judge mixes with analyze_audio on bounces.
 
 Typical flow: get_status -> get_song_overview -> set_song (tempo, time_signature, key, scale) -> \
-create_track (+ add_device / load_from_browser) -> create_clip + write_notes / write_drum_pattern -> \
-fire_scene to audition -> arrange_from_scenes -> set_mixer / write_automation -> master chain on \
-"master" -> bounce -> get_bounce_status -> analyze_audio -> create_release -> save_set.
+create_track (with device) / load_from_browser -> create_scene per section -> create_clip + write_notes / \
+write_drum_pattern -> fire_scene to audition -> arrange_from_scenes -> set_mixer / write_automation -> \
+master chain on "master" -> bounce -> get_bounce_status(wait=50) -> analyze_audio -> create_release.
 
 Conventions:
-- track: index of a regular track, its name, "return:A" (letter, index or name), or "master".
-- device: index, name, or a rack path such as "Drum Rack/Kick/Simpler". parameter: index or name. \
-With no device, parameter means the track mixer: volume, pan, send:A.
-- clip: pass slot (Session scene index) or arrangement_clip (index from get_arrangement), not both.
+- track: name (preferred), index, "return:A" or "master". Give every track you create an explicit name: \
+Live renumbers default names such as "3-Audio" when tracks move.
+- device: index, name, or a rack path like "Drum Rack/Kick/Simpler". parameter: index or name; with no \
+device it means the track mixer: volume, pan, send:A.
+- clip: slot (Session scene index) or arrangement_clip (index from get_arrangement), never both.
 - Time: beats (quarter notes) or "bar.beat.sixteenth", 1-based ("17.1.1"). Lengths: beats or "8 bars".
-- Pitch: MIDI number or note name in Live's convention, where C3 = 60.
-- Volume and sends in dB; pan -1..1; quantization like "1/16", "1/8T", "1 bar".
-- Parameter values: numbers are raw values; strings are display values ("-6 dB", "800 Hz") or item \
-names ("Sine").
+- Pitch: MIDI number or note name in Live's convention, C3 = 60.
+- Volume and sends in dB, pan -1..1, quantization like "1/16" or "1 bar". Parameter values: numbers are \
+raw, strings are display values ("-6 dB", "800 Hz", "2 s") or item names ("Sine").
 
-Tips:
-- Prefer names over indices; indices shift when tracks, scenes or clips are added or removed.
-- Read before you write: get_track, get_device and get_notes show current values and valid options.
-- Each mutating call is one undo step; call undo to revert a mistake.
-- Rendering is real time: bounce returns a job; poll get_bounce_status(wait=...) until it is done.
-- lom_get / lom_set / lom_call / lom_describe reach anything else in Live's object model.
-- Destructive tools delete material; confirm with the user before deleting their own work.
+Sounds: add_device and create_track(device=...) take any Live device by name ("Operator", "Drift", \
+"Glue Compressor", "DS Kick"). For presets, drum kits, samples and plug-ins, search_browser then \
+load_from_browser (drum_pad= loads a sample onto a pad).
+
+Arranging and automation: compose sections as scenes, then arrange_from_scenes places them with named \
+locators. Automate inside Session clips (write_automation): envelopes travel into the arrangement, but \
+arrangement clips cannot get new envelopes.
+
+Rendering: Live has no export API, so bounce records the arrangement in real time (the song plays \
+audibly) and returns a job; poll get_bounce_status(wait=50) until phase is "done". create_release then \
+normalises loudness (default -14 LUFS, -1 dBTP) and encodes WAV, FLAC, MP3 and AAC with tags.
+
+Saving: save_set needs macOS UI-automation permission; if it reports unavailable, ask the user to \
+press Cmd+S in Live.
+
+Habits: prefer names over indices; read before you write (get_track, get_device, get_notes show values \
+and valid options); each mutating call is one undo step, so undo reverts mistakes; tools marked \
+destructive delete material, so confirm before deleting the user's work; lom_get / lom_set / lom_call / \
+lom_describe reach anything else in Live's object model.
 """
 
 mcp = MCPServer(name="ableton", title="Ableton Live", instructions=INSTRUCTIONS, version=__version__)

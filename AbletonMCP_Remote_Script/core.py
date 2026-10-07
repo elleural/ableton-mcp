@@ -197,7 +197,8 @@ def dispatch(cs, request):
         else:
             spec = COMMANDS.get(command_type)
             if spec is None:
-                return _legacy(cs, request)
+                raise CommandError("not_found", "Unknown command: {0}".format(command_type),
+                                   hint="get_commands lists every command; the MCP server and Remote Script may be different versions")
             validate(spec, params)
             result = run_on_main_thread(cs, lambda: execute(cs, spec, params), spec.timeout)
         return {"status": "success", "result": result}
@@ -206,22 +207,6 @@ def dispatch(cs, request):
     except Exception as error:
         cs.log_message("AbletonMCP dispatch error:\n" + traceback.format_exc())
         return _error_response(CommandError("live_error", str(error) or error.__class__.__name__))
-
-
-def _legacy(cs, request):
-    """Commands of the v1 Remote Script, kept until the v2 MCP server replaces v1 everywhere."""
-    try:
-        from . import legacy
-    except ImportError:
-        legacy = None
-    if legacy is None or not legacy.handles(request.get("type", "")):
-        return _error_response(CommandError("not_found", "Unknown command: {0}".format(request.get("type", ""))))
-    response = legacy.handle(cs, request)
-    if response.get("status") == "error" and "error" not in response:
-        message = response.get("message", "Unknown error")
-        code = "not_found" if message.startswith("Unknown command") else "live_error"
-        response["error"] = {"code": code, "message": message}
-    return response
 
 
 def tick(cs):

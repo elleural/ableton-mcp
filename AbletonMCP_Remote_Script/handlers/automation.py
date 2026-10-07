@@ -302,7 +302,8 @@ def _parameter_out(song, owner, parameter):
     return out
 
 
-def _parse_points(song, points):
+def _parse_points(meter, points):
+    """Breakpoints in clip time; `meter` is the clip, so its time signature applies and song locators do not."""
     if not isinstance(points, (list, tuple)) or not points:
         raise CommandError("invalid_argument", "points must be a non-empty list of {time, value} objects")
     if len(points) > MAX_EVENTS:
@@ -311,7 +312,7 @@ def _parse_points(song, points):
     for position, point in enumerate(points):
         if not isinstance(point, dict) or "time" not in point or "value" not in point:
             raise CommandError("invalid_argument", "points[{0}] must be an object with 'time' and 'value', got {1!r}".format(position, point))
-        parsed.append((values.parse_time(song, point["time"], "points[{0}].time".format(position)), point["value"]))
+        parsed.append((values.parse_time(meter, point["time"], "points[{0}].time".format(position)), point["value"]))
     parsed.sort(key=lambda item: item[0])  # stable: points sharing a time keep their order (a jump)
     return parsed
 
@@ -377,10 +378,10 @@ def write_automation(ctx, track, parameter, slot=None, arrangement_clip=None, de
     envelope = find_envelope(clip, target)
     if envelope is None and clip.is_arrangement_clip:
         raise CommandError("unsupported", "Arrangement clip has no envelope for '{0}', and Live's API cannot create one on arrangement clips".format(target.name), hint=ARRANGEMENT_HINT)
-    range_start = None if start is None else values.parse_time(song, start, "start")
-    range_end = None if end is None else values.parse_time(song, end, "end")
+    range_start = None if start is None else values.parse_time(clip, start, "start")
+    range_end = None if end is None else values.parse_time(clip, end, "end")
     if points is not None:
-        breakpoints = _parse_points(song, points)
+        breakpoints = _parse_points(clip, points)
         range_start = breakpoints[0][0] if range_start is None else range_start
         range_end = breakpoints[-1][0] if range_end is None else range_end
     else:

@@ -271,6 +271,11 @@ def transport_action(action):
 
 def _position(song, position):
     """(beats, cue) for a position: beats, 'bar.beat.sixteenth', or a locator name."""
+    if isinstance(position, str):
+        key = position.strip().lower()
+        for cue in refs.locators(song):
+            if str(cue.name).strip().lower() == key:
+                return float(cue.time), cue
     try:
         return values.parse_time(song, position, "position"), None
     except CommandError:
@@ -664,9 +669,18 @@ def selection_state(song, app):
     return out
 
 
+def _refuse_during_bounce(ctx):
+    """Selecting or loading during a real-time bounce can arm a user track, which would record over it."""
+    job = ctx.state.get("bounce")
+    if isinstance(job, dict) and job.get("phase") in ("route", "arm", "go", "starting", "recording", "finalizing", "verifying", "aborting"):
+        raise CommandError("busy", "A bounce is recording; selection and browser loads wait until get_bounce_status reports it done")
+
+
 @command("select", undo=False)
 def select(ctx, track=None, scene=None, device=None, slot=None, view=None):
     """Select a track, scene, clip slot or device and show/focus a view; no arguments reads the selection."""
+    if any(value is not None for value in (track, scene, device, slot, view)):
+        _refuse_during_bounce(ctx)
     song, app = ctx.song, ctx.app
     if (device is not None or slot is not None) and track is None:
         raise CommandError("invalid_argument", "device and slot need a track")

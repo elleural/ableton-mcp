@@ -26,7 +26,7 @@ def browse(path: str = "", limit: int = 100, offset: int = 0) -> dict:
     return call("browse", timeout=25, path=path, limit=limit, offset=offset)
 
 
-@tool()
+@tool(destructive=True)
 def load_from_browser(track: int | str, uri: str | None = None, path: str | None = None, query: str | None = None,
                       position: int | None = None, drum_pad: int | str | None = None, slot: int | None = None) -> dict:
     """Load a browser item onto a track, chosen by exactly one of uri or path (from search_browser or

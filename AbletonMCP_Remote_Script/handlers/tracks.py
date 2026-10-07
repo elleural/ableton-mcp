@@ -543,6 +543,19 @@ def _native_category(app, device_name):
     return None
 
 
+def _require_unique_name(song, name, ignore=None):
+    """Refuse a name another track already has: duplicate names make every later name lookup ambiguous."""
+    if name is None:
+        return
+    key = str(name).strip().lower()
+    for candidate in list(song.tracks) + list(song.return_tracks):
+        if ignore is not None and refs.same(candidate, ignore):
+            continue
+        if key in (str(candidate.name).strip().lower(), refs.return_bare_name(candidate.name).strip().lower()):
+            raise CommandError("invalid_argument", "A track named '{0}' already exists ({1}); pick another name or use that track".format(
+                candidate.name, refs.track_ref(song, candidate)))
+
+
 def _set_name(song, track, name):
     if name is None:
         return
@@ -575,6 +588,7 @@ def create_track(ctx, kind, name=None, index=-1, color=None, device=None):
             raise CommandError("invalid_argument", "Return tracks are always added after the existing returns; omit index")
     elif not -1 <= position <= count:
         raise CommandError("invalid_argument", "index {0} is out of range: use 0..{1}, or -1 for the end".format(position, count))
+    _require_unique_name(song, name)
     device_name = None
     if device is not None:
         device_name = refs.native_device_name(ctx.app, device)
@@ -727,6 +741,7 @@ def duplicate_track(ctx, track, name=None):
         raise CommandError("unsupported", "Live can only duplicate regular tracks, not {0} tracks".format(label["kind"]))
     if name is not None and not str(name).strip():
         raise CommandError("invalid_argument", "name must not be empty")
+    _require_unique_name(song, name)
     before = list(song.tracks)
     song.duplicate_track(refs.index_of(before, owner))
     created = [item for item in song.tracks if refs.index_of(before, item) is None]

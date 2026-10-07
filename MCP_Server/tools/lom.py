@@ -15,13 +15,13 @@ def lom_get(path: str, properties: list[str] | None = None) -> dict:
     return call("lom_get", path=path, properties=properties)
 
 
-@tool()
+@tool(destructive=True)
 def lom_set(path: str, property: str, value: Any) -> dict:
     """Set a writable property of the object at `path`. Pass {"path": "..."} as value to refer to an object."""
     return call("lom_set", path=path, property=property, value=value)
 
 
-@tool()
+@tool(destructive=True)
 def lom_call(path: str, method: str, args: list[Any] | None = None) -> dict:
     """Call a function of the object at `path` with positional `args` ({"path": "..."} refers to an object).
 

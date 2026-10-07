@@ -25,7 +25,7 @@ AI agent ──MCP (stdio)──► AbletonMCP server ──TCP 127.0.0.1:9877�
 ```
 
 - The **Remote Script** runs inside Live. It executes commands on Live's main thread, with one undo step per change.
-- The **MCP server** exposes about 75 workflow-shaped tools. It also does what Live's API cannot, using ffmpeg: rendering by resampling, loudness and spectral analysis, and encoding and tagging releases.
+- The **MCP server** exposes 78 workflow-shaped tools. It also does what Live's API cannot, using ffmpeg: rendering by resampling, loudness and spectral analysis, and encoding and tagging releases.
 
 ## Requirements
 
@@ -84,8 +84,8 @@ me a -14 LUFS release."* The server's instructions teach the agent the workflow 
 usual flow:
 
 ```
-get_status → set_song → create_track / add_device / load_from_browser → create_clip → write_notes /
-write_drum_pattern → fire_scene → arrange_from_scenes → set_mixer / write_automation → bounce →
+get_status → set_song → create_track / add_device / load_from_browser → create_clip (notes, pattern) →
+write_automation → fire_scene → arrange_from_scenes → set_mixer / set_sidechain → bounce →
 get_bounce_status → analyze_audio → create_release → save_set
 ```
 

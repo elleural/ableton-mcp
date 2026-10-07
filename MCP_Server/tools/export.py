@@ -76,7 +76,7 @@ def _deliver(job_id):
         return _summary(call("bounce_cleanup", job_id=job_id, outputs=outputs))
 
 
-@tool()
+@tool(destructive=True)
 def bounce(start: float | str = 0, end: float | str | None = None, tail: float | str = "2 s",
            stems: list[int | str] | str | None = None, include_returns: bool = False,
            name: str | None = None, output_dir: str | None = None) -> dict:
@@ -87,7 +87,8 @@ def bounce(start: float | str = 0, end: float | str | None = None, tail: float |
     stems: "all" (unmuted tracks with audio), or track names or indices ("return:A" works); include_returns
     adds every return. Files go to output_dir (default ~/Music/AbletonMCP/Bounces/<name>/) as
     "<name> - Master.wav" and "<name> - <stem>.wav", replacing same-named files. The song plays audibly;
-    transport, loop, metronome and arm states are restored. Returns a job: poll get_bounce_status(wait=50).
+    transport, loop, metronome and arm states are restored. Returns a job: poll get_bounce_status(wait=50)
+    until phase is "done" (polling is required: it delivers the files and removes the temporary tracks).
     Example: bounce(stems=["Drums", "Bass"], name="Demo").
     """
     try:
@@ -198,7 +199,7 @@ def _bounce_live_info(source):
     return info
 
 
-@tool()
+@tool(destructive=True)
 def create_release(source: str, title: str, artist: str, album: str | None = None, year: int | str | None = None,
                    genre: str | None = None, track_number: int | None = None, artwork: str | None = None,
                    target_lufs: float = -14.0, true_peak: float = -1.0, formats: list[str] | None = None,

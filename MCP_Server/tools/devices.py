@@ -1,6 +1,8 @@
 """WS-D: devices, parameters, racks and chains (docs/PRD.md section 7.4). Owned by workstream D."""
 from typing import Any
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..app import call, tool
 
 
@@ -71,7 +73,7 @@ def set_device(track: int | str, device: int | str | list[int | str], enabled: b
                 compare_b=compare_b, properties=properties)
 
 
-@tool()
+@tool(destructive=True)
 def device_action(track: int | str, device: int | str | list[int | str], action: str,
                   args: dict[str, Any] | None = None) -> dict:
     """Run a type-specific device function; args holds its named arguments.
@@ -134,3 +136,48 @@ def set_chain(track: int | str, device: int | str | list[int | str], chain: int 
     """
     return call("set_chain", track=track, device=device, chain=chain, name=name, color=color, mute=mute, solo=solo,
                 volume_db=volume_db, pan=pan, in_note=in_note, out_note=out_note, choke_group=choke_group)
+
+
+def _compressor_path(track, device):
+    """Path of `device`, else of the first Compressor on the track, else of a newly added one."""
+    if device is not None:
+        return device, False
+    for entry in call("get_devices", track=track).get("devices", []):
+        if entry.get("class_name") == "Compressor2" or entry.get("class") == "Compressor":
+            return entry.get("path", entry.get("index")), False
+    added = call("add_device", track=track, name="Compressor")
+    entry = added.get("device", added)
+    return entry.get("path", entry.get("index")), True
+
+
+@tool()
+def set_sidechain(track: int | str, source: int | str | None = None, channel: str = "Post FX", threshold_db: float = -24.0,
+                  ratio: float = 4.0, attack_ms: float = 1.0, release_ms: float = 120.0, enabled: bool = True,
+                  device: int | str | list[int | str] | None = None) -> dict:
+    """Duck `track` whenever `source` plays: sidechain compression, e.g. a bass or pad pumping to the kick.
+
+    Uses Live's Compressor, the only device whose sidechain input the API can route: `device`, else the first
+    Compressor on the track, else a new one at the end of its chain. source: the triggering track (it needs
+    audio output; for a kick inside a drum track, use that track). channel: "Post FX" (default), "Pre FX" or
+    "Post Mixer". Sets S/C On, threshold (dB), ratio, attack and release (ms); enabled=False turns it off.
+    Example: set_sidechain("Bass", "Drums", threshold_db=-30, ratio=6, release_ms=150).
+    """
+    path, added = _compressor_path(track, device)
+    if not enabled:
+        result = call("set_device_parameters", track=track, device=path, values={"S/C On": "Off"})
+        return {"track": track, "device": path, "enabled": False, "parameters": result.get("parameters", result)}
+    if source is None:
+        raise ToolError("set_sidechain needs source (the track that triggers the ducking).")
+    source_name = call("get_track", track=source)["name"]
+    routing = call("set_device", track=track, device=path,
+                   properties={"input_routing_type": source_name, "input_routing_channel": channel})
+    values = {
+        "S/C On": "On",
+        "Threshold": "{0:g} dB".format(threshold_db),
+        "Ratio": "{0:g}".format(ratio),
+        "Attack": "{0:g} ms".format(attack_ms),
+        "Release": "{0:g} ms".format(release_ms),
+    }
+    result = call("set_device_parameters", track=track, device=path, values=values)
+    return {"track": track, "device": path, "added_compressor": added, "source": source_name, "channel": channel,
+            "routing": routing.get("properties", routing), "parameters": result.get("parameters", result)}

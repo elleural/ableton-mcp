@@ -81,7 +81,9 @@ def test_set_parameter_clamps_beyond_range():
 def test_set_parameter_numbers_are_raw():
     parameter = TimeParameter()
     assert devices.set_parameter(parameter, 0.25)["value"] == 0.25
-    assert devices.set_parameter(parameter, 7)["value"] == 1.0  # clamped to max
+    with pytest.raises(CommandError) as error:  # out of the raw range: an error, never a silent clamp
+        devices.set_parameter(parameter, 7)
+    assert "raw range" in error.value.message
 
 
 def test_set_parameter_rejects_text_without_number():

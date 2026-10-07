@@ -15,8 +15,14 @@ from .values import jsonable
 SONG_ROOTS = ("live_set", "song")
 APP_ROOTS = ("live_app", "app", "application")
 
-# Functions that open modal dialogs and would block Live's main thread until a human clicks.
-BLOCKED_METHODS = {("Application", "show_message"), ("Application", "show_on_the_fly_message")}
+# Functions that open modal dialogs (blocking Live's main thread until a human clicks) or that break the
+# one-undo-step-per-command contract.
+BLOCKED_METHODS = {
+    ("Application", "show_message"), ("Application", "show_on_the_fly_message"),
+    ("Song", "begin_undo_step"), ("Song", "end_undo_step"),
+}
+# Path tokens that lead to Python control-surface objects (including AbletonMCP itself), not Live objects.
+BLOCKED_PATH_TOKENS = {"control_surfaces"}
 
 _LIST_CHILDREN = (
     "tracks", "return_tracks", "visible_tracks", "scenes", "cue_points", "clip_slots", "arrangement_clips",
@@ -59,6 +65,8 @@ def resolve(song, app, path):
         else:
             if part.startswith("_"):
                 raise CommandError("invalid_argument", "Private attribute '{0}' is not accessible".format(part))
+            if part in BLOCKED_PATH_TOKENS:
+                raise CommandError("unsupported", "'{0}' leads to control-surface scripts, which lom tools do not touch".format(part))
             descriptor = getattr(type(current), part, None)
             if descriptor is None and not hasattr(current, part):
                 raise CommandError("not_found", "'{0}' has no property '{1}'. Use lom_describe to list what exists".format(" ".join(walked), part))

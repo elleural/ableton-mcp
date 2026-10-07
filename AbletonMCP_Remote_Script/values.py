@@ -33,7 +33,8 @@ def bar_length(song):
 def parse_time(song, value, name="time"):
     """Return beats for a number of beats or a 'bar.beat.sixteenth' string.
 
-    Numbers (and digit-only strings) are beats. A string containing a dot is always bar notation,
+    Numbers (and digit-only strings) are beats. A locator name ("Chorus") is that locator's time.
+    A string containing a dot is always bar notation,
     1-based: '17.1.1' is the start of bar 17, '3.3' is bar 3 beat 3. Beats per bar and sixteenths per
     beat are range-checked against the song's meter, so '2.5' in 4/4 is an error rather than a guess.
     """
@@ -60,10 +61,28 @@ def parse_time(song, value, name="time"):
                         name, value, song.signature_numerator, song.signature_denominator, beats_per_bar, sixteenths_per_beat),
                 )
             return (bar - 1) * bar_length(song) + (beat - 1) * beat_length(song) + (sixteenth - 1) * SIXTEENTH
+        located = _locator_time(song, text)
+        if located is not None:
+            return located
     raise CommandError(
         "invalid_argument",
-        "{0} must be a number of beats or a 'bar.beat.sixteenth' string such as '17.1.1', got {1!r}".format(name, value),
+        "{0} must be beats, a 'bar.beat.sixteenth' string such as '17.1.1', or a locator name, got {1!r}".format(name, value),
     )
+
+
+def _locator_time(song, name):
+    """Time in beats of the locator (cue point) named `name`, case-insensitively, or None."""
+    key = name.strip().lower()
+    if not key:
+        return None
+    try:
+        cues = list(song.cue_points)
+    except Exception:
+        return None
+    matches = [float(cue.time) for cue in cues if str(cue.name).strip().lower() == key]
+    if len(matches) > 1:
+        raise CommandError("invalid_argument", "{0} locators are named {1!r}; rename one or pass the time".format(len(matches), name))
+    return matches[0] if matches else None
 
 
 def parse_length(song, value, name="length"):
@@ -263,9 +282,8 @@ def parameter_out(parameter, index=None, detail=False):
     out = {"name": parameter.name, "value": round(float(parameter.value), 6), "display": parameter.str_for_value(parameter.value)}
     if index is not None:
         out = dict({"index": index}, **out)
-    if detail or parameter.is_quantized:
-        out["min"] = parameter.min
-        out["max"] = parameter.max
+    out["min"] = parameter.min
+    out["max"] = parameter.max
     if parameter.is_quantized:
         out["items"] = list(parameter.value_items)
     if detail:
@@ -294,7 +312,13 @@ def set_parameter(parameter, value):
     if isinstance(value, bool):
         raw = parameter.max if value else parameter.min
     elif isinstance(value, (int, float)):
-        raw = min(max(float(value), parameter.min), parameter.max)
+        raw = float(value)
+        if not parameter.min - 1e-9 <= raw <= parameter.max + 1e-9:
+            raise CommandError(
+                "invalid_argument",
+                "{0!r} is outside the raw range {1:g}..{2:g} of '{3}' (now {4}). Numbers are raw values; for display "
+                "units pass a string such as '30 %', '800 Hz' or '-6 dB'.".format(value, parameter.min, parameter.max, parameter.name, parameter.str_for_value(parameter.value)),
+            )
     elif isinstance(value, str):
         raw = None
         if parameter.is_quantized:

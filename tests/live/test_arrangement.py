@@ -229,7 +229,8 @@ def test_unwarped_audio_is_cut_to_the_section(live, scratch, song_state, tmp_pat
     assert spans(audio) == [(BASE, BASE + 2), (BASE + 8, BASE + 9), (BASE + 10, BASE + 10.5)]
 
 
-def test_locators_need_live_stopped(live, scratch, song_state):
+def test_locators_need_live_stopped(live, scratch, song_state, locators):
+    """The raw locator command refuses while playing; arrange_from_scenes stops the transport first."""
     midi = scratch.track("midi")
     scene = scratch.scene("s")
     session_clip(live, midi, scene, 4.0)
@@ -239,15 +240,17 @@ def test_locators_need_live_stopped(live, scratch, song_state):
     lom_call(live, "live_set", "start_playing")
     try:
         time.sleep(0.3)
-        with pytest.raises(ToolError) as error:
-            arrange_from_scenes([{"scene": scene, "bars": 1}], start=BASE, tracks=[midi])
-        assert "Stop playback first" in str(error.value)
         with pytest.raises(AbletonError) as error:
             live.send_command("arrangement_locator", {"time": BASE})
         assert error.value.code == "busy"
+        assert spans(midi) == [(BASE, BASE + 8)]  # the refused call changed nothing
+        locators.append(BASE)
+        result = arrange_from_scenes([{"scene": scene, "bars": 2, "name": PREFIX + " stopped"}], start=BASE, tracks=[midi])
+        assert result.get("stopped_transport") is True
+        playing = live.send_command("lom_get", {"path": "live_set", "properties": ["is_playing"]})["values"]["is_playing"]["value"]
+        assert playing is False
     finally:
         lom_call(live, "live_set", "stop_playing")
-    assert spans(midi) == [(BASE, BASE + 8)]  # the refused call changed nothing
 
 
 def test_many_sections_stay_quick(live, scratch, song_state):

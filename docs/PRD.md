@@ -103,11 +103,12 @@ The v1 toolkit connects and works for basic tasks, but it is not complete or fit
 J1 setup      get_status → new_set / open_set → set_song(tempo, time_signature, key, scale)
 J2 sounds     create_track(kind, name, device) → search_browser / load_from_browser / add_device
               → set_device_parameters (real units) → set_device / device_action
-J3 write      create_clip → write_notes (note names, chords via music_theory) / write_drum_pattern
-              → transform_notes (quantise, humanise, transpose) → fire_scene to audition, get_meters
-J4 structure  scenes as sections → arrange_from_scenes([{scene, bars}, …]) → create_locator per section
-J5 mix        set_mixer(volume_db, pan, sends) → create_bus → sidechain via set_device(routing)
-              → write_automation (clip envelopes travel into the arrangement)
+J3 write      create_clip(notes= / pattern=) or create_clip → write_notes (chords via music_theory) /
+              write_drum_pattern → transform_notes (quantise, humanise, transpose)
+              → write_automation in the Session clips → fire_scene to audition, get_meters
+J4 structure  scenes as sections → arrange_from_scenes([{scene, bars}, …]) (copies clips and their
+              envelopes; adds a named locator per section)
+J5 mix        set_mixer(volume_db, pan, sends) → create_bus → set_sidechain
 J6 master     add_device on "master" (EQ Eight, Glue Compressor, Limiter) → bounce(stems=…)
               → get_bounce_status → analyze_audio → adjust → re-bounce
               → create_release(title, artist, formats, target_lufs) → save_set

@@ -537,6 +537,14 @@ def _phase_arm(ctx, song, job):
                 wanted = track.name in bounce_names
                 if bool(track.arm) != wanted:
                     track.arm = wanted
+                # Push and auto-arm surfaces arm the selected track implicitly; that records too.
+                if not wanted and getattr(track, "implicit_arm", False):
+                    track.implicit_arm = False
+        # Keep the selection on a bounce track so auto-arm cannot implicitly arm a user track.
+        try:
+            song.view.selected_track = _require_track(song, job["tracks"][0]["name"])
+        except Exception:
+            pass
         song.stop_all_clips(False)
         song.back_to_arranger = False
         song.loop = False
@@ -611,9 +619,17 @@ def _phase_recording(ctx, song, job):
         raise CommandError("live_error", "The playhead jumped from {0} to {1}; the bounce was interrupted".format(
             values.format_time(song, last), values.format_time(song, position)))
     internal["last_position"], internal["last_time"] = position, now
+    bounce_names = set(entry["name"] for entry in job["tracks"])
     for entry in job["tracks"]:
         if not _require_track(song, entry["name"]).arm:
             raise CommandError("live_error", "Bounce track {0!r} was disarmed during the bounce".format(entry["name"]))
+    for track in song.tracks:
+        if track.name in bounce_names or not track.can_be_armed:
+            continue
+        if track.arm or getattr(track, "implicit_arm", False):
+            # Fail fast: an armed user track is recording over its own arrangement clips.
+            raise CommandError("live_error", "Track {0!r} was armed during the bounce, so the bounce stopped before it could record "
+                               "over its clips; its arrangement may hold a short take (undo reverts it)".format(track.name))
     if abs(float(song.tempo) - job["tempo"]) > 1e-3 and not internal.get("tempo_warned"):
         internal["tempo_warned"] = True
         job["warnings"].append("The tempo changed during the bounce (tempo automation?); offsets come from the recorded clips' warp markers")

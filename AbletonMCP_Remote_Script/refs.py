@@ -60,14 +60,23 @@ def _pick_index(items, index, what, context=""):
     raise CommandError("not_found", "{0} index {1} is out of range{2} ({3})".format(what, index, context, span))
 
 
-def _pick_named(items, ref, what, label=lambda item: item.name, extra_keys=()):
-    """Find exactly one item whose name matches ref (exact, then extra keys, then unique substring)."""
+def _pick_named(items, ref, what, label=lambda item: item.name, extra_keys=(), partial=False):
+    """Find exactly one item named ref (case-insensitive exact), then by each extra key in turn.
+
+    Several matches at any stage are an error, never a guess, because destructive tools resolve their
+    targets here. Only `partial=True` (parameters, per docs/PRD.md section 8) allows a unique substring.
+    """
     key = _key(ref)
+
+    def ambiguous(matches):
+        return CommandError("invalid_argument", "{0} {1!r} is ambiguous ({2} matches: {3}); use an index".format(
+            what, ref, len(matches), ", ".join(str(label(item)) for item in matches[:6])))
+
     exact = [item for item in items if _key(label(item)) == key]
     if len(exact) == 1:
         return exact[0]
     if len(exact) > 1:
-        raise CommandError("invalid_argument", "{0} name {1!r} is ambiguous ({2} matches); use an index".format(what, ref, len(exact)))
+        raise ambiguous(exact)
     for extra in extra_keys:
         matches = []
         for item in items:
@@ -78,9 +87,12 @@ def _pick_named(items, ref, what, label=lambda item: item.name, extra_keys=()):
                 pass
         if len(matches) == 1:
             return matches[0]
-    partial = [item for item in items if key and key in _key(label(item))]
-    if len(partial) == 1:
-        return partial[0]
+        if len(matches) > 1:
+            raise ambiguous(matches)
+    if partial:
+        candidates = [item for item in items if key and key in _key(label(item))]
+        if len(candidates) == 1:
+            return candidates[0]
     raise not_found(what, ref, ["{0}: {1}".format(position, label(item)) for position, item in enumerate(items)])
 
 
@@ -156,6 +168,11 @@ def track(song, ref):
     """Resolve a track reference to a Track."""
     if ref is None:
         raise CommandError("invalid_argument", "A track is required (index, name, 'return:A' or 'master')")
+    if isinstance(ref, str):
+        # A string that is exactly a track's name wins over an index reading, so "808" can be a name.
+        named = [item for item in list(song.tracks) + list(song.return_tracks) if _key(item.name) == _key(ref)]
+        if len(named) == 1:
+            return named[0]
     position = _int_like(ref)
     if position is not None:
         tracks = list(song.tracks)
@@ -171,9 +188,8 @@ def track(song, ref):
     key = _key(ref)
     if key in ("master", "main"):
         return song.master_track
-    for prefix in ("return:", "return "):
-        if key.startswith(prefix):
-            return _return_track(song, ref.strip()[len(prefix):], ref)
+    if key.startswith("return:"):
+        return _return_track(song, ref.strip()[len("return:"):], ref)
     regular, returns = list(song.tracks), list(song.return_tracks)
     exact = [item for item in regular + returns if _key(item.name) == key]
     if not exact:
@@ -201,6 +217,10 @@ def tracks(song, refs=None):
 
 def scene(song, ref):
     scenes = list(song.scenes)
+    if isinstance(ref, str):
+        named = [item for item in scenes if _key(item.name) == _key(ref)]
+        if len(named) == 1:
+            return named[0]
     position = _int_like(ref)
     if position is not None:
         return _pick_index(scenes, position, "Scene")
@@ -225,7 +245,8 @@ def groove(song, ref):
     position = _int_like(ref)
     if position is not None:
         return _pick_index(grooves, position, "Groove")
-    return _pick_named(grooves, ref, "Groove")
+    # Groove names are long ("Swing 16ths 66") and no tool deletes grooves, so a unique substring is safe.
+    return _pick_named(grooves, ref, "Groove", partial=True)
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +436,7 @@ def send_index(song, ref):
     if position is None and isinstance(ref, str):
         position = _return_index_from_letter(ref)
     if position is None:
-        target = _pick_named(returns, ref, "Return track")
+        target = _pick_named(returns, ref, "Return track", extra_keys=(lambda item: return_bare_name(item.name),))
         position = index_of(returns, target)
     if not 0 <= position < len(returns):
         raise not_found("Send", ref, [return_letter(index) for index in range(len(returns))])
@@ -457,7 +478,7 @@ def parameter(device_obj, ref):
     position = _int_like(ref)
     if position is not None:
         return _pick_index(parameters, position, "Parameter", " of '{0}'".format(device_obj.name))
-    return _pick_named(parameters, ref, "Parameter of '{0}'".format(device_obj.name), extra_keys=(lambda item: item.original_name,))
+    return _pick_named(parameters, ref, "Parameter of '{0}'".format(device_obj.name), extra_keys=(lambda item: item.original_name,), partial=True)
 
 
 def resolve_parameter(song, track_ref_value, device_ref, parameter_ref):

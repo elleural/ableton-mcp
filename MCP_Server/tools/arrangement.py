@@ -4,6 +4,8 @@ Long arrangement edits run as several short Remote Script calls (each about 0.75
 resumed with `resume`), so Live never freezes. Locators need one call each: Live creates a locator at
 the playhead, which moves one main-thread tick after it is written (see handlers/arrangement.py).
 """
+import time
+
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..app import call, tool
@@ -33,12 +35,24 @@ def arrange_from_scenes(sections: list[dict], start: float | str = "1.1.1", clea
     sections: [{scene (index or name), bars (or length: beats / "8 bars"), name?}]. Looping clips loop
     to fill a section exactly, at any length; one-shot clips play once. Clip envelopes travel along.
     A track's range is overwritten where it has a clip; clear=True first empties the whole range on the
-    affected tracks (default: all). locators=True adds a locator per section, named after it (Live must
-    be stopped). Returns undo_steps for undo. Example: arrange_from_scenes([{"scene": "Intro", "bars": 4},
-    {"scene": "Verse", "bars": 8}]). Verify with get_arrangement.
+    tracks taking part (those with a clip in a listed scene, or `tracks`). locators=True adds a locator per
+    section, named after it; the transport is stopped first if it is playing. Arrangement clips are
+    independent copies: write notes and automation in the Session clips BEFORE arranging (or re-run with
+    clear=True after editing them). Returns undo_steps. Example: arrange_from_scenes([{"scene": "Intro",
+    "bars": 4}, {"scene": "Verse", "bars": 8}]). Verify with get_arrangement.
     """
     placed, warnings, cleared = [], [], {"deleted": 0, "trimmed": 0}
     resume, calls = 0, 0
+    stopped = False
+    if locators:
+        try:
+            playing = bool(call("lom_get", path="live_set", properties=["is_playing"])["values"]["is_playing"].get("value"))
+        except (KeyError, TypeError, ToolError):
+            playing = False
+        if playing:
+            call("transport", action="stop")
+            stopped = True
+            time.sleep(0.15)  # the stop lands on Live's next tick
     while True:
         result = call("arrange_from_scenes", timeout=60, sections=sections, start=start, clear=clear, tracks=tracks,
                       locators=locators, resume=resume)
@@ -72,6 +86,8 @@ def arrange_from_scenes(sections: list[dict], start: float | str = "1.1.1", clea
     if resume is not None:
         result["unfinished"] = "Stopped after {0} calls; call again to continue".format(calls)
     result["undo_steps"] = calls + changed
+    if stopped:
+        result["stopped_transport"] = True
     return result
 
 
@@ -105,14 +121,17 @@ def _add_locators(pending, restore):
 
 @tool(destructive=True)
 def clear_arrangement(tracks: list[int | str] | None = None, start: float | str | None = None,
-                      end: float | str | None = None, mode: str = "trim") -> dict:
+                      end: float | str | None = None, mode: str = "trim", all_tracks: bool = False) -> dict:
     """Delete arrangement clips by track and time range. Destructive: confirm before deleting the user's work.
 
     mode "trim" (default) empties exactly start..end: clips inside are deleted and clips crossing an edge
     are cut there. "overlapping" deletes every clip touching the range, whole; "inside" deletes only clips
-    entirely within it. Omit start/end for the whole timeline and tracks for every track. Times are beats
-    or "bar.beat.sixteenth". Example: clear_arrangement(tracks=["Bass"], start="9.1.1", end="17.1.1").
+    entirely within it. Omit start/end for the whole timeline. Pass tracks, or all_tracks=True to clear
+    every track. Times are beats, "bar.beat.sixteenth" or a locator name.
+    Example: clear_arrangement(tracks=["Bass"], start="Chorus", end="Outro").
     """
+    if tracks is None and not all_tracks:
+        raise ToolError("clear_arrangement needs tracks=[...], or all_tracks=True to clear every track.")
     total, reports, resume, calls = None, {}, 0, 0
     while True:
         result = call("clear_arrangement", tracks=tracks, start=start, end=end, mode=mode, resume=resume)

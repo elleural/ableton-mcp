@@ -248,7 +248,32 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
   - Names that follow the default pattern ("5-808 Core Kit", "3-Audio") are renumbered when tracks move or are deleted. After deleting track 5, "6-808 Core Kit" became "5-808 Core Kit".
   - Give tracks explicit names (`create_track(name=...)`) before addressing them by name.
 
+## Dialogs, set loading, socket security (review fixes, M4)
+
+- **Save prompt button order** (verified on Live 12.4.6 macOS):
+  - The prompt reads `Save changes to "<set>" before closing?` and has 3 buttons: **0 = Don't Save, 1 = Cancel, 2 = Save**.
+  - Verified by pressing each index on a real prompt, raised by opening a template over a modified set.
+  - On an untitled set, "Save" opens the native Save panel, which shows as `open_dialog_count = 1` with no message and 0 buttons. It cannot be closed through the API.
+  - The original guess (Save, Don't Save, Cancel) was wrong in every position. Named buttons are accepted on macOS only; other platforms need indices.
+- **Commands keep running while a modal dialog is open:** reads and `press_current_dialog_button` both worked.
+- **Loading a set (open or new) re-creates the control surface.**
+  - Live calls `disconnect` and then `create_instance` with the already-imported code, so `mcp_state` (async jobs such as a bounce) is reset.
+  - Clients see `not_connected` for about 3 s, then the connection's stale-socket retry reconnects without help.
+- **Socket security:**
+  - The server binds 127.0.0.1 only.
+  - Browsers can still reach localhost. A cross-site `fetch` POST arrives as an HTTP request line, headers, then a JSON body. The first parser skipped non-JSON lines and executed the body, so any web page could drive Live.
+  - The shell now closes a connection at the first line that does not start with `{`. Verified: an HTTP POST setting the tempo has no effect, while raw JSON clients work.
+- **Name resolution is exact.**
+  - Only parameters and grooves accept a unique substring, and ambiguous names are errors.
+  - A string that exactly names a track or scene wins over an index reading ("808").
+  - Live re-adds return letters, so `return:<name>` and bare return names resolve by exact bare name.
+- **The bounce guards against arming:**
+  - It clears `implicit_arm`, which auto-arm surfaces such as Push set on the selected track.
+  - It selects a bounce track for the duration.
+  - It fails fast if any other track becomes armed while recording.
+  - `select` and `load_from_browser` refuse to run while a bounce records.
+
 ## Not yet spiked (owner)
 
-- New, open and save set, and whether the control surface is re-instantiated (WS-A).
+- Saving through UI automation (`save_set`, `new_set`, `export_audio`): blocked on this Mac until Accessibility is granted. Opening sets and dialog handling are verified above.
 - `Browser.load_item` targets: drum pad, clip slot, hotswap (WS-D).

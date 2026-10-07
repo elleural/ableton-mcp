@@ -50,11 +50,16 @@ def create_track(kind: str, name: str | None = None, index: int = -1, color: int
     # add_device load it, falling back to the browser. Remove the track again if that fails.
     created = call("create_track", kind=kind, name=name, index=index, color=color)
     try:
-        added = call("add_device", track=created["track"], name=device)
+        added = call("add_device", track=created["name"], name=device)
     except LiveToolError:
-        call("delete_track", track=created["track"])
+        # By name: an index could point at another track if a concurrent call inserted one meanwhile.
+        try:
+            call("delete_track", track=created["name"])
+        except LiveToolError:
+            pass
         raise
     created["device"] = added.get("device", added)
+    created["undo_steps"] = 2
     return created
 
 

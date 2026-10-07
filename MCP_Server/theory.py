@@ -674,9 +674,11 @@ def parse_numeral(numeral, key):
         semitones = key.intervals[degree - 1]
     else:
         semitones = MAJOR[degree - 1] + accidental  # accidentals are relative to the major scale: bVII, bIII, #iv
+    quality = _numeral_quality(roman, match.group("rest"))
+    if accidental is None and degree == 7 and key.intervals[6] == 10 and _normalize_quality(quality).startswith(("dim", "m7b5")):
+        semitones = 11  # vii°, vii°7, viiø7 in minor: the leading tone of harmonic minor (A minor -> G# dim)
     pc = (key.pc + semitones) % 12
     letter = LETTERS[(LETTERS.index(key.letter) + degree - 1) % 7]
-    quality = _numeral_quality(roman, match.group("rest"))
     tones = _parse_quality(_normalize_quality(quality), numeral)
     return Chord(pc, letter, _alter_for(letter, pc), _normalize_quality(quality), tones, None)
 

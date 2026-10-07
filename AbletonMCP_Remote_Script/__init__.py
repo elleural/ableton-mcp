@@ -227,14 +227,18 @@ class AbletonMCP(ControlSurface):
                     buffer = buffer.lstrip()
                     if not buffer:
                         break
+                    if not buffer.startswith("{"):
+                        # Not a JSON request: an HTTP request line from a browser, or garbage. Never skip
+                        # ahead to a JSON body, or any web page could drive Live (see docs/spikes.md).
+                        self._send(client, self._error(None, "invalid_argument", "Expected a JSON request object; closing"))
+                        return
                     try:
                         request, end = decoder.raw_decode(buffer)
                     except ValueError:
                         if "\n" not in buffer:
                             break  # Incomplete request: wait for more data.
-                        _, buffer = buffer.split("\n", 1)
-                        self._send(client, self._error(None, "invalid_argument", "Malformed JSON request"))
-                        continue
+                        self._send(client, self._error(None, "invalid_argument", "Malformed JSON request; closing"))
+                        return
                     buffer = buffer[end:]
                     self._send(client, self._dispatch(request))
         except Exception as error:

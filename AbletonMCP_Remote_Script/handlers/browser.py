@@ -664,9 +664,17 @@ def load_item_on_track(ctx, owner, item, position=None, drum_pad=None, holder=No
     return added, removed, created
 
 
+def _refuse_during_bounce(ctx):
+    """Selecting or loading during a real-time bounce can arm a user track, which would record over it."""
+    job = ctx.state.get("bounce")
+    if isinstance(job, dict) and job.get("phase") in ("route", "arm", "go", "starting", "recording", "finalizing", "verifying", "aborting"):
+        raise CommandError("busy", "A bounce is recording; selection and browser loads wait until get_bounce_status reports it done")
+
+
 @command("load_from_browser", timeout=30.0)
 def load_from_browser(ctx, track, uri=None, path=None, query=None, position=None, drum_pad=None, slot=None):
     """Load a browser item (by uri, path or query) onto a track, device position, drum pad or Session slot."""
+    _refuse_during_bounce(ctx)
     from . import devices as device_handlers
     song = ctx.song
     owner = refs.track(song, track)

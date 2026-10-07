@@ -412,8 +412,8 @@ def test_dialog_button_names():
     prompt = 'Save changes to "Untitled" before closing?'
     index = status_handlers.dialog_button_index
     assert index(1, prompt, 3) == 1 and index("2", prompt, 3) == 2
-    assert index("save", prompt, 3) == 0 and index("dont_save", prompt, 3) == 1 and index("Don't Save", prompt, 3) == 1
-    assert index("cancel", prompt, 3) == 2 and index("OK", "Missing samples", 1) == 0
+    assert index("save", prompt, 3) == 2 and index("dont_save", prompt, 3) == 0 and index("Don't Save", prompt, 3) == 0
+    assert index("cancel", prompt, 3) == 1 and index("OK", "Missing samples", 1) == 0
     for bad, message, count in ((3, prompt, 3), ("cancel", "Something else", 2), ("save", "Something else", 3), (True, prompt, 3)):
         with pytest.raises(CommandError):
             index(bad, message, count)
@@ -425,7 +425,7 @@ def test_respond_to_dialog():
     assert error.value.code == "not_found"
     app = App('Save changes to "Untitled" before closing?', 3)
     out = status_handlers.respond_to_dialog(Ctx(app=app), button="dont_save")
-    assert app.pressed == [1] and out["pressed"] == 1
+    assert app.pressed == [0] and out["pressed"] == 0  # verified on Live 12.4.6: 0 = Don't Save
 
 
 # ---------------------------------------------------------------------------

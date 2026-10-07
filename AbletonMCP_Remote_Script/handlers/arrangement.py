@@ -520,7 +520,12 @@ def arrange_from_scenes(ctx, sections, start=None, clear=False, tracks=None, loc
     if range_end > MAX_TIME:
         raise CommandError("invalid_argument", "The arrangement would end past Live's limit of {0:g} beats".format(MAX_TIME))
     targets = _arrangement_tracks(song, tracks)
-    units = [("clear", index) for index in range(len(targets))] if clear else []
+    units = []
+    if clear:
+        # Without an explicit track list, clear only the tracks taking part (a clip in at least one
+        # listed scene), so unrelated material such as recorded audio is left alone.
+        units = [("clear", index) for index, owner in enumerate(targets)
+                 if tracks is not None or any(owner.clip_slots[item[1]].has_clip for item in plan)]
     for section_index, (_, scene_index, _, _) in enumerate(plan):
         for index, owner in enumerate(targets):
             if owner.clip_slots[scene_index].has_clip:

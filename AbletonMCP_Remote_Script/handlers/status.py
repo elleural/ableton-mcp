@@ -70,16 +70,21 @@ def active_jobs(state):
             if isinstance(job, dict) and str(job.get("status", "")).lower() not in _FINISHED:
                 found.append(dict({"id": str(job_id)}, **_job_summary(job)))
     for key, job in state.items():
-        if key == "jobs" or not isinstance(job, dict) or "status" not in job:
+        # Job owners report either "status" or, like the bounce engine, "phase".
+        if key == "jobs" or not isinstance(job, dict) or not ("status" in job or "phase" in job):
             continue
-        if str(job.get("status", "")).lower() not in _FINISHED:
-            found.append(dict({"id": str(job.get("id", key))}, **_job_summary(job)))
+        status = job.get("status", job.get("phase"))
+        if str(status).lower() not in _FINISHED:
+            summary = _job_summary(job)
+            summary.setdefault("kind", key)
+            summary["status"] = status
+            found.append(dict({"id": str(job.get("id", key))}, **summary))
     return found
 
 
 def _job_summary(job):
     summary = {}
-    for key in ("kind", "status", "progress", "message"):
+    for key in ("kind", "status", "phase", "progress", "message"):
         if key in job and isinstance(job[key], (str, int, float, bool)):
             summary[key] = job[key]
     return summary
@@ -406,7 +411,11 @@ def redo(ctx, steps=1):
 # Live does not expose button labels. Names are resolved only where the layout is known; the
 # save prompt's order (Save / Don't Save / Cancel, left to right) is unverified on 12.4.6
 # (docs/spikes.md), so callers that care should prefer indices.
-SAVE_PROMPT_BUTTONS = {"save": 0, "yes": 0, "dont_save": 1, "don't save": 1, "dont save": 1, "no": 1, "discard": 1, "cancel": 2}
+# Verified on Live 12.4.6 (macOS) by pressing each index on a real "Save changes ... before closing?"
+# prompt: 0 = Don't Save, 1 = Cancel, 2 = Save (docs/spikes.md). Other platforms are unverified, so
+# there only indices are accepted.
+SAVE_PROMPT_BUTTONS = {"dont_save": 0, "don't save": 0, "dont save": 0, "no": 0, "discard": 0, "cancel": 1, "save": 2, "yes": 2}
+SAVE_PROMPT_ORDER_VERIFIED = sys.platform == "darwin"
 
 
 def is_save_prompt(message):
@@ -429,7 +438,7 @@ def dialog_button_index(button, message, count):
         return dialog_button_index(int(name), message, count)
     if count == 1 and name in ("ok", "okay", "close", "continue"):
         return 0
-    if count == 3 and is_save_prompt(message):
+    if count == 3 and is_save_prompt(message) and SAVE_PROMPT_ORDER_VERIFIED:
         for key, index in SAVE_PROMPT_BUTTONS.items():
             if name == key.replace("_", " "):
                 return index

@@ -1,6 +1,6 @@
 # AbletonMCP tools
 
-Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 77 tools.
+Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 78 tools.
 Conventions for every tool (addressing, units, errors) are in [PRD.md section 8](PRD.md#8-conventions-contract-for-every-tool).
 
 ## Status and overview
@@ -305,7 +305,7 @@ names ("input_routing_type": "Kick" for a Compressor sidechain). "sample.<name>"
 ("sample.warping": true, "sample.warp_mode": "complex"); "view.<name>" sets view properties.
 Failures are listed per property.
 
-### `device_action(track, device, action, args=None)`
+### `device_action(track, device, action, args=None)` *(destructive)*
 
 Run a type-specific device function; args holds its named arguments.
 
@@ -349,6 +349,16 @@ another pad), out_note and choke_group (0 = none, 1..16).
 device: the rack (index, name or path). chain: index, name, drum note ("C1") or "return:0" for a
 return chain. Example: set_chain("Drums", "Drum Rack", "C1", volume_db=-3, choke_group=1).
 
+### `set_sidechain(track, source=None, channel='Post FX', threshold_db=-24.0, ratio=4.0, attack_ms=1.0, release_ms=120.0, enabled=True, device=None)`
+
+Duck `track` whenever `source` plays: sidechain compression, e.g. a bass or pad pumping to the kick.
+
+Uses Live's Compressor, the only device whose sidechain input the API can route: `device`, else the first
+Compressor on the track, else a new one at the end of its chain. source: the triggering track (it needs
+audio output; for a kick inside a drum track, use that track). channel: "Post FX" (default), "Pre FX" or
+"Post Mixer". Sets S/C On, threshold (dB), ratio, attack and release (ms); enabled=False turns it off.
+Example: set_sidechain("Bass", "Drums", threshold_db=-30, ratio=6, release_ms=150).
+
 ## Browser
 
 ### `search_browser(query, category='all', limit=25, refresh=False)` *(read-only)*
@@ -369,7 +379,7 @@ List a browser folder. path "" lists the categories; "drums/Drum Hits/Kick" list
 match case-insensitively, file extensions optional). Items give name, path, uri, kind, is_loadable and
 is_device; page large folders with limit and offset.
 
-### `load_from_browser(track, uri=None, path=None, query=None, position=None, drum_pad=None, slot=None)`
+### `load_from_browser(track, uri=None, path=None, query=None, position=None, drum_pad=None, slot=None)` *(destructive)*
 
 Load a browser item onto a track, chosen by exactly one of uri or path (from search_browser or
 browse) or query (the best loadable match).
@@ -382,14 +392,16 @@ Returns the new or replaced devices, the pad or slot, and any created tracks.
 
 ## Clips and notes
 
-### `create_clip(track, slot=None, at=None, length=None, name=None, color=None, file_path=None)`
+### `create_clip(track, slot=None, at=None, length=None, name=None, color=None, file_path=None, notes=None, pattern=None)` *(destructive)*
 
-Create a clip: MIDI in an empty Session `slot` or on the arrangement `at` a time; audio from `file_path` on audio tracks.
+Create a clip: MIDI in an empty Session `slot` (0-based scene index) or on the arrangement `at` a time; audio
+from `file_path` on audio tracks. Optionally fill it in the same call: notes (as write_notes) and/or pattern (drum
+steps, as write_drum_pattern).
 
-length: MIDI only, beats or "N bars" (default 4 beats). at: beats or "bar.beat.sixteenth" ("9.1.1").
-MIDI ranges that overlap arrangement clips are refused (audio reports what it trimmed). color: index 0..69 or "#RRGGBB".
-Returns the new clip (as get_clip). Next: write_notes, write_drum_pattern or music_theory.
-Example: create_clip(track="Bass", slot=0, length="2 bars", name="Bassline").
+length: MIDI only, beats or "N bars" (default 4 beats; a bare number is beats). at: beats, "bar.beat.sixteenth"
+("9.1.1") or a locator name. MIDI ranges that overlap arrangement clips are refused (audio reports what it trimmed).
+color: index 0..69 or "#RRGGBB". Returns the new clip (as get_clip).
+Example: create_clip("Drums", slot=0, length="1 bar", pattern={"kick": "x---x---x---x---"}).
 
 ### `get_clip(track, slot=None, arrangement_clip=None, notes=False, limit=200)` *(read-only)*
 
@@ -413,7 +425,7 @@ Example: set_clip(track="Keys", slot=0, loop_end="3.1.1", launch_quantization="1
 
 Delete a Session or arrangement clip. Destructive: confirm with the user before deleting their own material.
 
-### `duplicate_clip(track, slot=None, arrangement_clip=None, to_track=None, to_slot=None, to_time=None, move=False)`
+### `duplicate_clip(track, slot=None, arrangement_clip=None, to_track=None, to_slot=None, to_time=None, move=False)` *(destructive)*
 
 Copy (or move=True) a clip: Session -> Session slot, Session -> arrangement, or arrangement -> arrangement.
 
@@ -537,22 +549,25 @@ every track's clip from its scene for the section's length.
 sections: [{scene (index or name), bars (or length: beats / "8 bars"), name?}]. Looping clips loop
 to fill a section exactly, at any length; one-shot clips play once. Clip envelopes travel along.
 A track's range is overwritten where it has a clip; clear=True first empties the whole range on the
-affected tracks (default: all). locators=True adds a locator per section, named after it (Live must
-be stopped). Returns undo_steps for undo. Example: arrange_from_scenes([{"scene": "Intro", "bars": 4},
-{"scene": "Verse", "bars": 8}]). Verify with get_arrangement.
+tracks taking part (those with a clip in a listed scene, or `tracks`). locators=True adds a locator per
+section, named after it; the transport is stopped first if it is playing. Arrangement clips are
+independent copies: write notes and automation in the Session clips BEFORE arranging (or re-run with
+clear=True after editing them). Returns undo_steps. Example: arrange_from_scenes([{"scene": "Intro",
+"bars": 4}, {"scene": "Verse", "bars": 8}]). Verify with get_arrangement.
 
-### `clear_arrangement(tracks=None, start=None, end=None, mode='trim')` *(destructive)*
+### `clear_arrangement(tracks=None, start=None, end=None, mode='trim', all_tracks=False)` *(destructive)*
 
 Delete arrangement clips by track and time range. Destructive: confirm before deleting the user's work.
 
 mode "trim" (default) empties exactly start..end: clips inside are deleted and clips crossing an edge
 are cut there. "overlapping" deletes every clip touching the range, whole; "inside" deletes only clips
-entirely within it. Omit start/end for the whole timeline and tracks for every track. Times are beats
-or "bar.beat.sixteenth". Example: clear_arrangement(tracks=["Bass"], start="9.1.1", end="17.1.1").
+entirely within it. Omit start/end for the whole timeline. Pass tracks, or all_tracks=True to clear
+every track. Times are beats, "bar.beat.sixteenth" or a locator name.
+Example: clear_arrangement(tracks=["Bass"], start="Chorus", end="Outro").
 
 ## Export, analysis and release
 
-### `bounce(start=0, end=None, tail='2 s', stems=None, include_returns=False, name=None, output_dir=None)`
+### `bounce(start=0, end=None, tail='2 s', stems=None, include_returns=False, name=None, output_dir=None)` *(destructive)*
 
 Render the arrangement to WAV in real time (resampling inside Live): the master plus optional stems.
 
@@ -561,7 +576,8 @@ rounded up to a bar. tail: time after end for reverb and delay tails: beats, "1 
 stems: "all" (unmuted tracks with audio), or track names or indices ("return:A" works); include_returns
 adds every return. Files go to output_dir (default ~/Music/AbletonMCP/Bounces/<name>/) as
 "<name> - Master.wav" and "<name> - <stem>.wav", replacing same-named files. The song plays audibly;
-transport, loop, metronome and arm states are restored. Returns a job: poll get_bounce_status(wait=50).
+transport, loop, metronome and arm states are restored. Returns a job: poll get_bounce_status(wait=50)
+until phase is "done" (polling is required: it delivers the files and removes the temporary tracks).
 Example: bounce(stems=["Drums", "Bass"], name="Demo").
 
 ### `get_bounce_status(wait=0)`
@@ -589,7 +605,7 @@ high >6k), a short-term loudness curve, dropouts and plain-language notes. secti
 bounce's locators, else Live's from 1.1.1) or [{name, start, end}] in seconds, for loudness per section.
 images=True adds a spectrogram and a waveform (PNG).
 
-### `create_release(source, title, artist, album=None, year=None, genre=None, track_number=None, artwork=None, target_lufs=-14.0, true_peak=-1.0, formats=None, output_dir=None, stems=None)`
+### `create_release(source, title, artist, album=None, year=None, genre=None, track_number=None, artwork=None, target_lufs=-14.0, true_peak=-1.0, formats=None, output_dir=None, stems=None)` *(destructive)*
 
 Master and package a finished song: normalise a bounced master, encode, tag, embed artwork, write release.json.
 
@@ -622,11 +638,11 @@ Paths use Max for Live style: "live_set tracks 0 mixer_device volume", "live_set
 "live_app view". Lists are summarised as counts and names. Use the curated tools first; this reaches
 anything they do not cover.
 
-### `lom_set(path, property, value)`
+### `lom_set(path, property, value)` *(destructive)*
 
 Set a writable property of the object at `path`. Pass {"path": "..."} as value to refer to an object.
 
-### `lom_call(path, method, args=None)`
+### `lom_call(path, method, args=None)` *(destructive)*
 
 Call a function of the object at `path` with positional `args` ({"path": "..."} refers to an object).
 

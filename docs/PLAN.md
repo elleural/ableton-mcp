@@ -2,6 +2,8 @@
 
 Implements [PRD.md](PRD.md). Branch: `claude/ableton-mcp-toolkit-c6f16c`, one PR.
 
+**Status (2026-10-06): M1–M4 complete.** 78 tools; all offline and live suites green, including the end-to-end release test. Deferred items: [handoff/2026-10-06-abletonmcp-v2.md](handoff/2026-10-06-abletonmcp-v2.md).
+
 ## Milestones
 
 | # | Milestone | Owner | Exit criteria |

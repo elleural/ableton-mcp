@@ -13,17 +13,31 @@ from ..app import call, tool
 CONVERSION_WAIT = 30.0  # seconds clip_action waits for Live's audio-to-MIDI conversion
 
 
-@tool()
+@tool(destructive=True)
 def create_clip(track: int | str, slot: int | None = None, at: float | str | None = None, length: float | str | None = None,
-                name: str | None = None, color: int | str | None = None, file_path: str | None = None) -> dict:
-    """Create a clip: MIDI in an empty Session `slot` or on the arrangement `at` a time; audio from `file_path` on audio tracks.
+                name: str | None = None, color: int | str | None = None, file_path: str | None = None,
+                notes: list[dict] | None = None, pattern: dict[str, str] | None = None) -> dict:
+    """Create a clip: MIDI in an empty Session `slot` (0-based scene index) or on the arrangement `at` a time; audio
+    from `file_path` on audio tracks. Optionally fill it in the same call: notes (as write_notes) and/or pattern (drum
+    steps, as write_drum_pattern).
 
-    length: MIDI only, beats or "N bars" (default 4 beats). at: beats or "bar.beat.sixteenth" ("9.1.1").
-    MIDI ranges that overlap arrangement clips are refused (audio reports what it trimmed). color: index 0..69 or "#RRGGBB".
-    Returns the new clip (as get_clip). Next: write_notes, write_drum_pattern or music_theory.
-    Example: create_clip(track="Bass", slot=0, length="2 bars", name="Bassline").
+    length: MIDI only, beats or "N bars" (default 4 beats; a bare number is beats). at: beats, "bar.beat.sixteenth"
+    ("9.1.1") or a locator name. MIDI ranges that overlap arrangement clips are refused (audio reports what it trimmed).
+    color: index 0..69 or "#RRGGBB". Returns the new clip (as get_clip).
+    Example: create_clip("Drums", slot=0, length="1 bar", pattern={"kick": "x---x---x---x---"}).
     """
-    return call("create_clip", track=track, slot=slot, at=at, length=length, name=name, color=color, file_path=file_path)
+    created = call("create_clip", track=track, slot=slot, at=at, length=length, name=name, color=color, file_path=file_path)
+    if notes is None and pattern is None:
+        return created
+    where = {"slot": slot} if slot is not None else {"arrangement_clip": created.get("arrangement_clip")}
+    if notes is not None:
+        written = write_notes(track=track, notes=notes, mode="add", **where)
+        created["notes_written"] = written.get("count", written.get("added", len(notes)))
+    if pattern is not None:
+        drums = write_drum_pattern(track=track, pattern=pattern, **where)
+        created["pattern"] = dict((key, drums[key]) for key in ("drums", "notes_written", "warnings") if key in drums)
+    created["undo_steps"] = 1 + (notes is not None) + (pattern is not None)
+    return created
 
 
 @tool(read_only=True)
@@ -68,7 +82,7 @@ def delete_clip(track: int | str, slot: int | None = None, arrangement_clip: int
     return call("delete_clip", track=track, slot=slot, arrangement_clip=arrangement_clip)
 
 
-@tool()
+@tool(destructive=True)
 def duplicate_clip(track: int | str, slot: int | None = None, arrangement_clip: int | None = None, to_track: int | str | None = None,
                    to_slot: int | None = None, to_time: float | str | None = None, move: bool = False) -> dict:
     """Copy (or move=True) a clip: Session -> Session slot, Session -> arrangement, or arrangement -> arrangement.

@@ -359,6 +359,40 @@ def device_path(device_obj):
     return {"path": "/".join(str(item) for item in indices), "name_path": "/".join(names)}
 
 
+_NATIVE_DEVICES = {}
+
+
+def native_device_names(app):
+    """{category: [names]} of native Live devices, as Track.insert_device spells them (cached)."""
+    if not _NATIVE_DEVICES:
+        for category in ("instruments", "audio_effects", "midi_effects"):
+            _NATIVE_DEVICES[category] = [item.name for item in getattr(app.browser, category).children if item.is_device]
+    return _NATIVE_DEVICES
+
+
+def native_device_name(app, name):
+    """The exact insert_device name for a case-insensitive device name ("eq eight" -> "EQ Eight").
+
+    Raises not_found listing close matches (or every native device) when the name is not native;
+    pack and Max for Live devices must be loaded through the browser instead.
+    """
+    key = _key(name)
+    everything = []
+    for names in native_device_names(app).values():
+        for candidate in names:
+            if _key(candidate) == key:
+                return candidate
+            everything.append(candidate)
+    close = [candidate for candidate in everything if key in _key(candidate) or _key(candidate) in key]
+    error = not_found("Native device", name, close or everything)
+    error.hint = "Pack and Max for Live devices are not native: load them with search_browser / load_from_browser."
+    return _raise(error)
+
+
+def _raise(error):
+    raise error
+
+
 # ---------------------------------------------------------------------------
 # Parameters
 # ---------------------------------------------------------------------------

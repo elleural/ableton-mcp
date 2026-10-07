@@ -80,6 +80,8 @@ one command, and expose a status command.
 | `device(song, track, device_ref)` | Returns `(device, container, index)`. Paths like `"Drum Rack/Kick/Simpler"` or `[0, 1, 0]`; chain segments accept an index, name or drum note |
 | `chain(rack, ref)` | A rack chain |
 | `device_path(device)` | `{path: "1/0/1", name_path: "Rack/Chain/Device"}` |
+| `native_device_names(app)` | `{category: [names]}` of native devices, cached |
+| `native_device_name(app, name)` | Exact `insert_device` spelling for a case-insensitive name, or not_found with suggestions; pack and Max for Live devices go through the browser |
 | `parameter(device, ref)` | A device parameter |
 | `mixer_parameter(song, track, ref)` | volume, pan, `send:A`, activator, crossfader, cue_volume, tempo, left_pan, right_pan |
 | `resolve_parameter(song, track, device_ref, parameter_ref)` | Device parameter, or mixer when `device_ref` is None |
@@ -144,6 +146,8 @@ def delete_track(track: int | str) -> dict:
 |---|---|---|---|
 | Unit | `tests/unit/` | `uv run pytest tests/unit` | Pure logic; use small fakes. Offline stubs for `_Framework` and `Live` are installed by `tests/conftest.py` |
 | Contract | `tests/contract/` | `uv run pytest tests/contract` | Must stay green: every `call()` matches a registered command and its params; tools are documented; ≤ 80 tools |
+
+Remote Script command names must be unique across all handler modules (a duplicate makes the second module fail to load). Name a command after its tool, and prefix internal helper commands with your area, e.g. `bounce_status`.
 | Live | `tests/live/test_<ws>.py` | `uv run pytest tests/live/test_<ws>.py -x` | Real Live. Fixtures below |
 
 Live test fixtures (`tests/live/conftest.py`):

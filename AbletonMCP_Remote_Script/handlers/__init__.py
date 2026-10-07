@@ -10,8 +10,9 @@ MODULES = [
     "status",       # WS-A: status, overview, undo/redo, dialogs
     "song",         # WS-A: song settings, transport, scenes, locators, grooves, selection
     "tracks",       # WS-B: tracks, mixer, routing, meters, buses
-    "clips",        # WS-C: clips, notes, drum patterns, clip actions, automation
-    "arrangement",  # WS-C: arrangement timeline, arrange_from_scenes
+    "clips",        # WS-C: clips, notes, drum patterns, clip actions
+    "automation",   # WS-F: clip automation envelopes
+    "arrangement",  # WS-F: arrangement timeline, arrange_from_scenes
     "devices",      # WS-D: devices, parameters, racks, chains, device actions
     "browser",      # WS-D: browser search, browse, load
     "bounce",       # WS-E: real-time bounce engine

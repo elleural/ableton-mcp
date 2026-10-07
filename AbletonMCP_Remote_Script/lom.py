@@ -69,8 +69,19 @@ def resolve(song, app, path):
     return current, " ".join(walked)
 
 
-def _is_live_object(value):
-    return hasattr(value, "canonical_parent") or type(value).__module__.startswith("Live")
+_LIVE_MODULES = None
+
+
+def _live_module_names():
+    """Live's Boost.Python classes report bare module names ("Track", "Browser"), so collect them."""
+    global _LIVE_MODULES
+    if _LIVE_MODULES is None:
+        try:
+            import Live
+            _LIVE_MODULES = set(name for name in dir(Live) if not name.startswith("_"))
+        except ImportError:
+            _LIVE_MODULES = set()
+    return _LIVE_MODULES
 
 
 def _is_sequence(value):
@@ -79,9 +90,16 @@ def _is_sequence(value):
     return hasattr(value, "__len__") and hasattr(value, "__getitem__")
 
 
+def _is_live_object(value):
+    if value is None or isinstance(value, (str, bytes, int, float, bool, dict, list, tuple)) or _is_sequence(value):
+        return False
+    module = type(value).__module__
+    return hasattr(value, "canonical_parent") or module.startswith("Live") or module in _live_module_names()
+
+
 def summarize(value, max_items=32):
     """Compact JSON for a property value: primitives as-is, objects and lists summarised."""
-    if _is_sequence(value) and not _is_live_object(value):
+    if _is_sequence(value):
         items = list(value)
         if items and _is_live_object(items[0]):
             names = []

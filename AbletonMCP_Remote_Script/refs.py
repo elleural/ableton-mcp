@@ -360,21 +360,23 @@ def device_path(device_obj):
 
 
 _NATIVE_DEVICES = {}
+_NATIVE_DEVICES_TTL = 30.0
 
 
 def native_device_names(app):
-    """{category: [names]} of native Live devices, as Track.insert_device spells them (cached)."""
-    if not _NATIVE_DEVICES:
-        # Packs add Max for Live devices to these categories (source = the pack's name, e.g.
-        # "Creative Extensions"); insert_device rejects them, so keep only built-in devices.
-        # Comparing against installed pack names stays correct if Live localises "Built-in".
-        packs = set(item.name for item in app.browser.packs.children) - {"Core Library"}
+    """{category: [names]} of the devices in the browser's instrument and effect categories (cached 30 s).
+
+    Most insert with Track.insert_device. Max for Live devices (built-in ones such as "DS Kick", and
+    pack ones such as "Granulator III") are listed too but only load through the browser, so callers
+    fall back to Browser.load_item when insert_device rejects a name (see docs/spikes.md).
+    """
+    import time
+    if not _NATIVE_DEVICES or time.time() - _NATIVE_DEVICES.get("_built", 0) > _NATIVE_DEVICES_TTL:
+        _NATIVE_DEVICES.clear()
         for category in ("instruments", "audio_effects", "midi_effects"):
-            _NATIVE_DEVICES[category] = [
-                item.name for item in getattr(app.browser, category).children
-                if item.is_device and (item.source == "Built-in" or item.source not in packs)
-            ]
-    return _NATIVE_DEVICES
+            _NATIVE_DEVICES[category] = [item.name for item in getattr(app.browser, category).children if item.is_device]
+        _NATIVE_DEVICES["_built"] = time.time()
+    return dict((key, names) for key, names in _NATIVE_DEVICES.items() if key != "_built")
 
 
 def native_device_name(app, name):
@@ -391,8 +393,8 @@ def native_device_name(app, name):
                 return candidate
             everything.append(candidate)
     close = [candidate for candidate in everything if key in _key(candidate) or _key(candidate) in key]
-    error = not_found("Native device", name, close or everything)
-    error.hint = "Pack and Max for Live devices are not native: load them with search_browser / load_from_browser."
+    error = not_found("Device", name, close or everything)
+    error.hint = "Presets, kits and samples are not devices: find them with search_browser and load them with load_from_browser."
     return _raise(error)
 
 

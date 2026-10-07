@@ -200,6 +200,35 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
   - For a 4-minute song: analysis 1.8 s, images 0.6 s, and a five-format release with limiting 19.7 s.
 - A Remote Script reload during recording is safe: the ticker job state lives in `ctx.state`, and the bounce finishes and restores everything.
 
+## Devices and browser (WS-D)
+
+- `DeviceParameter.display_value` uses canonical units: Hz for frequencies, **ms for times** ("1.20 s" reads 1200).
+  - `values.parse_display_number` normalizes "s" and "kHz" to these units.
+  - `values.set_display_number` verifies the read-back and bisects when it does not match.
+- `insert_device` rejects Max for Live devices, even the built-in ones that the browser lists as "Built-in":
+  - effects: Align Delay, Envelope Follower, LFO, Shaper
+  - MIDI effects: Envelope MIDI, Expression Control, MIDI Monitor, MPE Control, Note Echo, Shaper MIDI
+  - drum synths: DS Clang, DS Clap, DS Cymbal, DS FM, DS HH, DS Kick, DS Snare, DS Tom
+  - all pack devices
+  - These load through `Browser.load_item`. `add_device` and `create_track(device=...)` fall back to it automatically.
+- "Drum Sampler" inserts only under the name "DrumSampler".
+- Meld's on/off parameter has the original name "On", not "Device On".
+- A/B compare swaps the whole device state. Rack macros add and remove in steps of 2.
+- Simpler's `reverse` and `crop` write new files and rename the device.
+- Any read of a deleted device raises a Boost `ArgumentError`, not `AttributeError`.
+- `Browser.load_item` targets:
+  - It acts synchronously on the selected track.
+  - Insert position: select the neighbour device and set `Track.View.device_insert_mode` to 1. The mode sticks, so reset it afterwards. Its getter returns True only for mode 0.
+  - Drum pad: set `RackDevice.View.selected_drum_pad`, then load.
+  - Session slot: set `Song.View.highlighted_clip_slot`. This only works while Session view is focused.
+  - Loading an instrument replaces the track's instrument (in place when the type matches). A sample loaded onto a MIDI track becomes a Simpler.
+  - `.alc` clips create a new track.
+  - Hot-swap mode redirects loads, so exit it first.
+- Browser size and scan time (main thread):
+  - Core Library alone: 20.3k items in 0.6 s, cold.
+  - With 12 packs: 48.2k items in 0.5 s, or 0.8 s when spread over 20 ms ticks (about 4 s wall clock).
+  - The `full_refresh` listener never fired during testing. A pack-list poll and TTLs keep the search index fresh.
+
 ## Not yet spiked (owner)
 
 - New, open and save set, and whether the control surface is re-instantiated (WS-A).

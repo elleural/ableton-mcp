@@ -65,7 +65,7 @@ def test_parse_root_note():
     assert values.parse_root_note(11) == 11
 
 
-@pytest.mark.parametrize("text, number", [("-6.0 dB", -6.0), ("-inf dB", float("-inf")), ("800 Hz", 800.0), ("1.20 kHz", 1200.0), ("25L", -25.0), ("50R", 50.0), ("C", 0.0), ("35 %", 35.0)])
+@pytest.mark.parametrize("text, number", [("-6.0 dB", -6.0), ("-inf dB", float("-inf")), ("800 Hz", 800.0), ("1.20 kHz", 1200.0), ("25L", -25.0), ("50R", 50.0), ("C", 0.0), ("35 %", 35.0), ("2.50 s", 2500.0), ("35 ms", 35.0), ("2 s", 2000.0)])
 def test_parse_display_number(text, number):
     assert values.parse_display_number(text) == number
 

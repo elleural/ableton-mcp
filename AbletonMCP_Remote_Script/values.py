@@ -173,9 +173,10 @@ _NUMBER = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
 
 
 def parse_display_number(text):
-    """Extract the numeric part of a parameter display string ('-6.0 dB' -> -6.0, '-inf dB' -> -inf).
+    """Number from a parameter display string, in DeviceParameter.display_value's canonical units.
 
-    Handles Live's unit suffixes such as 'kHz', 'ms', 's', '%', and pan strings like '25L'.
+    display_value counts frequencies in Hz and times in ms (docs/spikes.md), so '1.20 kHz' -> 1200,
+    '2.50 s' -> 2500, '35 ms' -> 35, '-6.0 dB' -> -6.0, '-inf dB' -> -inf, '25L' -> -25, 'C' -> 0.
     Returns None when the string carries no number.
     """
     if text is None:
@@ -191,9 +192,12 @@ def parse_display_number(text):
         return None
     number = float(match.group(0))
     suffix = text[match.end():].strip().lower()
-    if suffix.startswith("khz"):
+    unit = re.match(r"[a-z%]*", suffix).group(0)
+    if unit == "khz":
         number *= 1000.0
-    elif suffix.startswith("l") and not suffix.startswith("lfo"):
+    elif unit in ("s", "sec", "secs", "second", "seconds"):
+        number *= 1000.0
+    elif unit == "l":
         number = -abs(number)
     return number
 
@@ -214,12 +218,16 @@ def set_display_number(parameter, target):
     Live 12.4 accepts display units through DeviceParameter.display_value (see docs/spikes.md);
     the bisection over str_for_value is the fallback for parameters that reject it.
     """
+    target = float(target)
     try:
-        parameter.display_value = float(target)
-        return
+        parameter.display_value = target
+        shown = parse_display_number(parameter.str_for_value(parameter.value))
+        if shown is not None and (shown == target or abs(shown - target) <= max(abs(target) * 0.02, 0.011)):
+            return
     except Exception:
         pass
-    parameter.value = value_for_display_number(parameter, float(target))
+    # display_value rejected the write or landed elsewhere (unit mismatch): search the display string.
+    parameter.value = value_for_display_number(parameter, target)
 
 
 def value_for_display_number(parameter, target, iterations=48):

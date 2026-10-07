@@ -3,7 +3,7 @@ import time
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from ..app import call, tool
+from ..app import LiveToolError, call, tool
 
 ROUTING_ATTEMPTS = 20
 ROUTING_DELAY = 0.05  # seconds; Live offers a new track as a routing target from its next tick (~100 ms)
@@ -33,15 +33,29 @@ def retry_busy(function, attempts=None, delay=None):
 @tool()
 def create_track(kind: str, name: str | None = None, index: int = -1, color: int | str | None = None,
                  device: str | None = None) -> dict:
-    """Create a track: kind "midi", "audio" or "return", optionally named, coloured and with a native device.
+    """Create a track: kind "midi", "audio" or "return", optionally named, coloured and with a first device.
 
     index: position among regular tracks (-1 = end; returns always go last). color: Live colour index
-    0..69 or "#RRGGBB". device: a native Live device by name, case-insensitive ("Operator", "eq eight");
-    instruments and MIDI effects need a MIDI track. Pack and Max for Live devices go through
-    load_from_browser. Returns the new track's ref, routing and arm state (MIDI tracks can come up armed).
-    Example: create_track("midi", "Bass", device="Operator").
+    0..69 or "#RRGGBB". device: any device by name, case-insensitive ("Operator", "eq eight", "DS Kick");
+    native devices are inserted directly, Max for Live and pack devices are loaded through the browser.
+    Instruments and MIDI effects need a MIDI track. Returns the new track's ref, routing and arm state
+    (MIDI tracks can come up armed). Example: create_track("midi", "Bass", device="Operator").
     """
-    return call("create_track", kind=kind, name=name, index=index, color=color, device=device)
+    try:
+        return call("create_track", kind=kind, name=name, index=index, color=color, device=device)
+    except LiveToolError as error:
+        if device is None or error.code not in ("live_error", "not_found"):
+            raise
+    # Not insertable by name (Max for Live, pack or renamed device): create the track, then let
+    # add_device load it, falling back to the browser. Remove the track again if that fails.
+    created = call("create_track", kind=kind, name=name, index=index, color=color)
+    try:
+        added = call("add_device", track=created["track"], name=device)
+    except LiveToolError:
+        call("delete_track", track=created["track"])
+        raise
+    created["device"] = added.get("device", added)
+    return created
 
 
 @tool(read_only=True)

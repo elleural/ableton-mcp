@@ -152,6 +152,32 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
 - Packs add Max for Live devices to the browser's device categories, with `BrowserItem.source` set to the pack name. Examples: Bass and Poli from "Creative Extensions", "Granulator III", "PitchLoop89". `insert_device` rejects them, so `refs.native_device_names` keeps only built-in devices.
 - When the audio interface disconnects, Live switches to "No Device": the transport freezes, Ext. In and Out disappear from the routing lists, and commands slow to about 0.3 s.
 
+## Clips and notes (WS-C)
+
+- `Clip.gain` is raw 0..1, where 0.4 = 0 dB.
+  - Above 0.4: dB = 40·(g−0.4), reaching +24 dB at 1.0.
+  - From about 0.03 to 0.4: dB = 42x − 200x², where x = g−0.4. That gives about −42.9 dB at 0.03.
+  - Below that the curve steepens, reaching −inf at about 1e-4. Outside 0..1 raises "Gain is out of range". The tools invert the formula and bisect the display string below −43 dB.
+- Loop and marker setters only behave while the clip is looping. Unlooped, the `loop_*` setters move the markers and the `start_marker` setter is ignored. `crop` keeps the region from `start_marker` to `loop_end`.
+- Notes:
+  - A note added at an existing pitch and start replaces it. A same-pitch overlap truncates the earlier note.
+  - Velocity must be above 0 and at most 127.
+  - `apply_note_modifications` accepts only the `MidiNoteVector` Live returned, not a Python list. Unknown ids raise "All given IDs must be present in clip".
+- Fire and `stop_all_clips` take effect a tick later.
+- Conversions:
+  - `audio_to_midi_clip` is deferred. Its new track appears after the source and is polled by `clips_conversion_status`.
+  - Drum-rack and Simpler conversions are synchronous. They append the track at the end, with no clip.
+  - All three select the new track.
+- Warp markers: `WarpMarker(sample_time=seconds, beat_time=beats)`, while `beat_to_sample_time` returns frames. Audio quantize regenerates the markers.
+- Arrangement:
+  - Overlapping inserts trim existing clips.
+  - Copying between MIDI and audio tracks raises "Incompatible track types for clip duplication".
+  - Session-to-arrangement copies span the loop for looping clips, and the markers for unlooped ones.
+- Grooves: a clip's groove cannot be set back to None, and new MIDI clips come with the pool's groove assigned.
+- Audio clips:
+  - `warp_mode` must be one of `available_warp_modes`.
+  - The same file came up warped once and unwarped another time, so set warping explicitly.
+
 ## Not yet spiked (owner)
 
 - New, open and save set, and whether the control surface is re-instantiated (WS-A).

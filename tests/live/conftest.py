@@ -100,12 +100,20 @@ class Scratch(object):
         return name
 
     def cleanup(self):
-        """Delete every track, return track and scene whose name starts with this scratch prefix."""
-        for collection, method in (("tracks", "delete_track"), ("return_tracks", "delete_return_track"), ("scenes", "delete_scene")):
-            names = self.live.send_command("lom_get", {"path": "live_set", "properties": [collection]})["values"][collection].get("items", [])
+        """Delete every track, return track and scene whose name starts with this scratch prefix.
+
+        One read and one batched delete (a single round trip to Live's main thread).
+        """
+        collections = ("tracks", "return_tracks", "scenes")
+        found = self.live.send_command("lom_get", {"path": "live_set", "properties": list(collections)})["values"]
+        commands = []
+        for collection, method in zip(collections, ("delete_track", "delete_return_track", "delete_scene")):
+            names = found[collection].get("items", [])
             for index in reversed(range(len(names))):
                 if names[index].startswith(self.prefix):
-                    self.live.send_command("lom_call", {"path": "live_set", "method": method, "args": [index]})
+                    commands.append({"type": "lom_call", "params": {"path": "live_set", "method": method, "args": [index]}})
+        if commands:
+            self.live.send_command("batch", {"commands": commands, "stop_on_error": False})
 
 
 @pytest.fixture
@@ -133,13 +141,10 @@ def song_state(live):
     values = live.send_command("lom_get", {"path": "live_set", "properties": SONG_STATE})["values"]
     snapshot = dict((name, entry["value"]) for name, entry in values.items() if "value" in entry)
     yield snapshot
+    # Restore in one batched round trip: stop first, then every snapshotted property.
+    commands = [{"type": "lom_call", "params": {"path": "live_set", "method": "stop_playing", "args": []}}]
+    commands += [{"type": "lom_set", "params": {"path": "live_set", "property": name, "value": snapshot[name]}} for name in SONG_STATE if name in snapshot]
     try:
-        live.send_command("lom_call", {"path": "live_set", "method": "stop_playing", "args": []})
+        live.send_command("batch", {"commands": commands, "stop_on_error": False})
     except AbletonError:
         pass
-    for name in SONG_STATE:
-        if name in snapshot:
-            try:
-                live.send_command("lom_set", {"path": "live_set", "property": name, "value": snapshot[name]})
-            except AbletonError:
-                pass

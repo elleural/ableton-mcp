@@ -55,6 +55,9 @@ Tips:
 
 mcp = MCPServer(name="ableton", title="Ableton Live", instructions=INSTRUCTIONS, version=__version__)
 
+# (function, annotations) for every registered tool, in registration order; used to generate docs.
+REGISTERED_TOOLS = []
+
 
 def call(command, timeout=None, **params):
     """Send a command to the Remote Script and return its result.
@@ -97,6 +100,7 @@ def tool(read_only=False, destructive=False, idempotent=False, title=None):
             return to_text(func(*args, **kwargs))
 
         mcp.tool(annotations=annotations, structured_output=False)(wrapper)
+        REGISTERED_TOOLS.append((func, annotations))
         return func
 
     return decorator

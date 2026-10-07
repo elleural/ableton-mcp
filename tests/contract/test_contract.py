@@ -21,9 +21,10 @@ MAX_TOOLS = 80
 @pytest.fixture(scope="module")
 def registry():
     core = importlib.import_module("AbletonMCP_Remote_Script.core")
-    if not core.COMMANDS:
-        report = core.load_handlers()
-        assert not report["failed"], "Handler modules failed to import:\n" + "\n".join(report["failed"].values())
+    # Always load every handler module: other unit tests may have imported only some of them,
+    # and import_module is a no-op for modules already loaded, so nothing registers twice.
+    report = core.load_handlers()
+    assert not report["failed"], "Handler modules failed to import:\n" + "\n".join(report["failed"].values())
     return core.COMMANDS
 
 

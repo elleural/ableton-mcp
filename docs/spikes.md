@@ -93,6 +93,41 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
 - Hot reload must strip submodule attributes from the package, including orphans that are no longer in `sys.modules`. Otherwise `from . import x` keeps returning stale modules. This is covered by `tests/unit/test_reload.py`.
 - Live writes `__pycache__/*.cpython-311.pyc` next to the sources, and `.gitignore` covers it.
 
+## Command latency: `Live.Base.Timer`
+
+- `update_display` runs at about 10 Hz. Before the fix, round trips were quantised to 100 ms steps (median 299 ms with five builders active).
+- `Live.Base.Timer(callback, interval_ms, repeat=False, start=False)` fires on Live's main thread.
+  - At `interval=10` it measured a median gap of 10.3 ms and a maximum of 22 ms. Asking for 1 ms still gives about 10 ms.
+  - An exception escaping the callback stops the timer for good.
+- The shell drains the command queue from a 10 ms timer:
+  - The callback is a lambda that looks up `self._on_task_timer` on every call, so reloads take effect.
+  - The callback never raises.
+  - `update_display` restarts the timer if it ever stops.
+  - Tickers (async jobs) stay on `update_display`, at about 10 Hz.
+
+## Song, transport, locators (WS-A)
+
+- Writes to song properties take effect on the next tick. Reads in the same tick are stale for `current_song_time`, `punch_in`, `punch_out`, `loop` and `is_playing`. Example: `set_or_delete_cue` called in the same tick as a playhead write acts at the *old* position.
+- Play from a position:
+  - Setting `current_song_time` and then calling `continue_playing` while stopped ignores the moved playhead.
+  - Instead, move the start marker (`start_time`) and call `start_playing` on the next tick. A jump while stopped also moves the start marker.
+- The playhead cannot move past `song_length`. Cue points snap to 1/16 (152.4 becomes 152.5) and must lie within `song_length`. Locator edits need the transport stopped, so they are two-phase commands (`{"pending": ...}`, then re-call).
+- Groove amounts:
+  - `quantization_amount`, `timing_amount` and `random_amount` run 0–100.
+  - `velocity_amount` runs −100 to 100.
+  - `Song.groove_amount` tops out at 1.3125.
+- `Song.back_to_arranger = False` stops the overriding Session clip while the transport keeps running.
+- `capture_and_insert_scene` adds an unnamed scene after the selected scene.
+- Four `tap_tempo` calls start playback.
+- Next and previous locator jumps also stop at the loop edges.
+- Live does not record empty undo steps, and its undo labels are only "Undo Custom Action".
+- UI automation on this Mac: Accessibility is off for `claude.app`, and Automation of System Events is granted. Menu scripting needs both, so `ui_automation.status()` reports it unavailable without running osascript (no prompts).
+- Not yet verified (gated test `ABLETON_MCP_TEST_UI=1`):
+  - opening, creating and saving sets
+  - the save-prompt button order
+  - whether commands run while a modal dialog is open
+  - whether opening a set re-creates the control surface
+
 ## Not yet spiked (owner)
 
 - New, open and save set, and whether the control surface is re-instantiated (WS-A).

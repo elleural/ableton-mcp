@@ -34,3 +34,4 @@ def get_commands(ctx, include_failures=False):
 def dump_live_api(ctx, output_path):
     """Write the full description of Live's Python API to output_path as JSON."""
     return introspection.dump_live_api(output_path, ctx.app)
+

@@ -30,6 +30,9 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 9877
 SCRIPT_VERSION = "2.0.0-shell"
 RELOAD_TIMEOUT = 30.0
+# Live's display tick (update_display) runs at about 10 Hz; a Live.Base.Timer drains the command
+# queue every ~10 ms instead, cutting command latency roughly tenfold (docs/spikes.md).
+TASK_TIMER_INTERVAL_MS = 10
 
 
 def create_instance(c_instance):
@@ -60,6 +63,30 @@ class AbletonMCP(ControlSurface):
             self._mcp_tasks = queue.Queue()
         if not hasattr(self, "mcp_state"):
             self.mcp_state = {}
+        if not hasattr(self, "client_sockets"):
+            self.client_sockets = []
+        self._ensure_task_timer()
+
+    def _ensure_task_timer(self):
+        """Start (or restart) the fast main-thread timer that drains queued commands."""
+        timer = getattr(self, "_mcp_timer", None)
+        try:
+            if timer is None:
+                import Live
+                # The lambda looks the method up on every call, so reloaded code takes effect.
+                timer = Live.Base.Timer(callback=lambda: self._on_task_timer(), interval=TASK_TIMER_INTERVAL_MS, repeat=True)
+                self._mcp_timer = timer
+            if not timer.running:
+                timer.start()
+        except Exception:
+            self.log_message("AbletonMCP: task timer unavailable, using the display tick:\n" + traceback.format_exc())
+
+    def _on_task_timer(self):
+        # An exception escaping a Live timer callback stops the timer, so never let one out.
+        try:
+            self._drain_tasks()
+        except Exception:
+            pass
 
     def _after_reload(self):
         """Run when an older shell hot-swaps this live instance onto this class."""
@@ -123,9 +150,8 @@ class AbletonMCP(ControlSurface):
         """Queue a callable to run on Live's main thread at the next display tick."""
         self._mcp_tasks.put(task)
 
-    def update_display(self):
-        """Live calls this on the main thread about ten times a second."""
-        ControlSurface.update_display(self)
+    def _drain_tasks(self):
+        """Run every queued task (main thread only)."""
         tasks = getattr(self, "_mcp_tasks", None)
         while tasks is not None:
             try:
@@ -136,6 +162,14 @@ class AbletonMCP(ControlSurface):
                 task()
             except Exception:
                 self.log_message("AbletonMCP: task error:\n" + traceback.format_exc())
+
+    def update_display(self):
+        """Live calls this on the main thread about ten times a second."""
+        ControlSurface.update_display(self)
+        self._drain_tasks()
+        timer = getattr(self, "_mcp_timer", None)
+        if timer is not None and not timer.running and self.running:
+            self._ensure_task_timer()
         core = getattr(self, "core", None)
         if core is not None:
             try:
@@ -173,6 +207,7 @@ class AbletonMCP(ControlSurface):
                 if self.running:
                     self.log_message("AbletonMCP: accept error: " + str(error))
                 continue
+            self.client_sockets.append(client)
             client_thread = threading.Thread(target=self._handle_client, args=(client,))
             client_thread.daemon = True
             client_thread.start()
@@ -209,6 +244,10 @@ class AbletonMCP(ControlSurface):
             try:
                 client.close()
             except Exception:
+                pass
+            try:
+                self.client_sockets.remove(client)
+            except (AttributeError, ValueError):
                 pass
 
     def _send(self, client, response):
@@ -271,6 +310,17 @@ class AbletonMCP(ControlSurface):
     def disconnect(self):
         """Called when Live quits or the control surface is deselected."""
         self.running = False
+        timer = getattr(self, "_mcp_timer", None)
+        if timer is not None:
+            try:
+                timer.stop()
+            except Exception:
+                pass
+        for client in list(getattr(self, "client_sockets", [])):
+            try:
+                client.close()
+            except Exception:
+                pass
         if self.server:
             try:
                 self.server.close()

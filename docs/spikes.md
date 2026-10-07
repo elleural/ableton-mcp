@@ -128,6 +128,30 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
   - whether commands run while a modal dialog is open
   - whether opening a set re-creates the control surface
 
+## Tracks, routing, mixer, meters (WS-B)
+
+- **Meters are linear in dB:** `dBFS = 76 * raw - 70`.
+  - Accurate to within 0.01 dB from -69.5 to +6 dBFS, for both output and input meters.
+  - Raw 0 means -70 dBFS or lower. Raw 1 means +6 dBFS or higher.
+  - `output_meter_level` is the maximum of left and right, held for about 1 s.
+  - Measured with a sine WAV of known peak and the track volume swept.
+- Routing timing, more precise than the earlier note:
+  - A new track is missing from *other* tracks' routing lists until the next tick.
+  - Its own lists are ready only if it was the first track created in that tick; later ones show `[""]`.
+  - A MIDI track's output list reads empty in the tick an instrument is inserted.
+  - `create_bus` is therefore two-phase: create, then route through the internal command `tracks_route_to_bus`. That makes it two undo steps.
+- Setting a routing type refreshes its channel list immediately, so type and channel can be set in one call.
+- Routing display names equal the track names. The "N-" prefix belongs to default names such as "6-Audio" and is not added by Live. Duplicate names are listed twice, and `RoutingType.attached_object` is the Track.
+- A bus track only passes routed audio with monitoring "In". Use "No Input" as the bus input, so the interface input is not monitored.
+- Return tracks:
+  - Live re-adds the letter on every rename ("C-X" becomes "C-C-X"), so resolve and rename with `refs.return_bare_name`.
+  - `duplicate_track` raises IndexError for return tracks.
+  - Sends from a return to another return report state 1 (inactive).
+- At the minimum, volume and send `display_value` read -70, not -inf. `values.volume_db` reports -inf there.
+- `can_show_chains` needs an Instrument Rack with at least two chains.
+- Packs add Max for Live devices to the browser's device categories, with `BrowserItem.source` set to the pack name. Examples: Bass and Poli from "Creative Extensions", "Granulator III", "PitchLoop89". `insert_device` rejects them, so `refs.native_device_names` keeps only built-in devices.
+- When the audio interface disconnects, Live switches to "No Device": the transport freezes, Ext. In and Out disappear from the routing lists, and commands slow to about 0.3 s.
+
 ## Not yet spiked (owner)
 
 - New, open and save set, and whether the control surface is re-instantiated (WS-A).

@@ -6,6 +6,7 @@ Several builders share one Live instance, so every live test session holds an ex
 """
 import contextlib
 import fcntl
+import re
 from pathlib import Path
 
 import pytest
@@ -110,7 +111,8 @@ class Scratch(object):
         for collection, method in zip(collections, ("delete_track", "delete_return_track", "delete_scene")):
             names = found[collection].get("items", [])
             for index in reversed(range(len(names))):
-                if names[index].startswith(self.prefix):
+                # Live prefixes return track names with their letter ("C-[test:x] verb").
+                if re.sub(r"^[A-Z]-", "", names[index]).startswith(self.prefix):
                     commands.append({"type": "lom_call", "params": {"path": "live_set", "method": method, "args": [index]}})
         if commands:
             self.live.send_command("batch", {"commands": commands, "stop_on_error": False})

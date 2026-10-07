@@ -310,7 +310,9 @@ def set_parameter(parameter, value):
 
 
 def volume_db(parameter):
-    """Current dB of a volume or send parameter."""
+    """Current dB of a volume or send parameter; -inf at the minimum (display_value floors at -70)."""
+    if parameter.value <= parameter.min:
+        return float("-inf")
     return display_number(parameter)
 
 

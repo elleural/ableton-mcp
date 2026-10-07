@@ -365,8 +365,15 @@ _NATIVE_DEVICES = {}
 def native_device_names(app):
     """{category: [names]} of native Live devices, as Track.insert_device spells them (cached)."""
     if not _NATIVE_DEVICES:
+        # Packs add Max for Live devices to these categories (source = the pack's name, e.g.
+        # "Creative Extensions"); insert_device rejects them, so keep only built-in devices.
+        # Comparing against installed pack names stays correct if Live localises "Built-in".
+        packs = set(item.name for item in app.browser.packs.children) - {"Core Library"}
         for category in ("instruments", "audio_effects", "midi_effects"):
-            _NATIVE_DEVICES[category] = [item.name for item in getattr(app.browser, category).children if item.is_device]
+            _NATIVE_DEVICES[category] = [
+                item.name for item in getattr(app.browser, category).children
+                if item.is_device and (item.source == "Built-in" or item.source not in packs)
+            ]
     return _NATIVE_DEVICES
 
 

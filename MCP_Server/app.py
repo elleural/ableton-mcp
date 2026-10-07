@@ -55,6 +55,16 @@ Tips:
 
 mcp = MCPServer(name="ableton", title="Ableton Live", instructions=INSTRUCTIONS, version=__version__)
 
+
+class LiveToolError(ToolError):
+    """A failed tool call that keeps the Remote Script's error code ("busy", "not_found", ...) and hint."""
+
+    def __init__(self, error):
+        ToolError.__init__(self, str(error))
+        self.code = getattr(error, "code", "live_error")
+        self.hint = getattr(error, "hint", None)
+
+
 # (function, annotations) for every registered tool, in registration order; used to generate docs.
 REGISTERED_TOOLS = []
 
@@ -63,13 +73,14 @@ def call(command, timeout=None, **params):
     """Send a command to the Remote Script and return its result.
 
     None-valued parameters are omitted so the Remote Script applies its defaults.
-    Remote Script errors become ToolError, which the agent sees as a failed tool call.
+    Remote Script errors become LiveToolError (a ToolError carrying `code` and `hint`), which the
+    agent sees as a failed tool call.
     """
     params = dict((key, value) for key, value in params.items() if value is not None)
     try:
         return get_connection().send_command(command, params, timeout=timeout)
     except AbletonError as error:
-        raise ToolError(str(error))
+        raise LiveToolError(error) from error
 
 
 def to_text(result):

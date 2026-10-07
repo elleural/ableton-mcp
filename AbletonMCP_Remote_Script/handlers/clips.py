@@ -23,6 +23,20 @@ from ..errors import CommandError, not_found
 DEFAULT_NOTE_LIMIT = 200
 MAX_NOTE_LIMIT = 10000
 MAX_ARRANGEMENT_TIME = 1576800.0  # Track.create_midi_clip accepts [0, 1576800] beats
+
+
+def _restore_playhead(song, position):
+    """Arrangement pastes (create_*_clip, duplicate_clip_to_arrangement) move the playhead; put it back.
+
+    Applied by Live on the next tick; skipped while playing so playback is never disturbed.
+    """
+    if song.is_playing:
+        return
+    try:
+        if abs(float(song.current_song_time) - position) > 1e-6:
+            song.current_song_time = position
+    except Exception:
+        pass
 EPS = 1e-6
 NOTE_DEFAULTS = {"velocity": 100.0, "probability": 1.0, "velocity_deviation": 0.0, "release_velocity": 64.0, "mute": False}
 _NOTE_KEYS = ("pitch", "pitches", "start", "duration", "velocity", "probability", "velocity_deviation", "release_velocity", "mute")
@@ -899,6 +913,7 @@ def create_clip(ctx, track, slot=None, at=None, length=None, name=None, color=No
         start = values.parse_time(song, at, "at")
         if not 0 <= start <= MAX_ARRANGEMENT_TIME:
             raise CommandError("invalid_argument", "at must be within 0..{0:g} beats, got {1!r}".format(MAX_ARRANGEMENT_TIME, at))
+        playhead = float(song.current_song_time)
         if midi:
             check_free(song, owner, start, start + beats)
             clip = owner.create_midi_clip(start, beats)
@@ -906,6 +921,7 @@ def create_clip(ctx, track, slot=None, at=None, length=None, name=None, color=No
             before = _arrangement_extents(owner)
             clip = owner.create_audio_clip(path, start)
             warnings = _collateral(owner, before, clip)
+        _restore_playhead(song, playhead)
     if name is not None:
         clip.name = str(name)
     if color is not None:
@@ -1115,7 +1131,9 @@ def duplicate_clip(ctx, track, slot=None, arrangement_clip=None, to_track=None, 
         length = _arrangement_length(source)
         if length is not None:
             check_free(song, target, start, start + length, ignore=source if move else None)
+        playhead = float(song.current_song_time)
         copy = target.duplicate_clip_to_arrangement(source, start)
+        _restore_playhead(song, playhead)
         if move:
             _delete_source(source)
     else:

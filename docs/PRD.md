@@ -315,9 +315,9 @@ checks Live, the port, the script version, ffmpeg and permissions.
 | Save / new set | None | UI automation; `open_set` via the OS; Live dialogs via the dialog API |
 | Group tracks | None | Audio bus tracks via output routing (`create_bus`) |
 | Freeze, flatten, consolidate | None | Not supported; bounce covers rendering needs |
-| Arrangement automation lanes | None | Clip envelopes, carried into the arrangement by `duplicate_clip` and `arrange_from_scenes` |
+| Arrangement automation lanes (track-level) | None | Session clip envelopes, carried into the arrangement by `duplicate_clip` and `arrange_from_scenes`. They stay editable there, but new ones cannot be created on arrangement clips |
 | Arrangement tempo changes | None | Scene tempos in Session; one global tempo for the arrangement render |
-| Resizing arrangement clips | `end_time` read-only | Tile copies (`arrange_from_scenes`), loop markers |
+| Resizing arrangement clips | `end_time` is read-only, but on an unlooped clip `loop_end` sets the extent | `arrange_from_scenes` sizes one looping clip per track per section (spikes.md) |
 | Count-in | Read-only | Detected and reported before a bounce |
 
 ## 11. Quality and acceptance

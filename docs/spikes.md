@@ -58,21 +58,25 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
 - `Track.create_midi_clip(start, length)` creates an arrangement clip (looping, loop 0..length).
 - `Live.Clip.MidiNoteSpecification(pitch=, start_time=, duration=, velocity=, mute=, probability=, velocity_deviation=, release_velocity=)` takes keyword arguments. `add_new_notes(tuple)` returns note ids. `get_notes_extended` returns MidiNote with every field. `apply_note_modifications` edits by id.
 - `Track.duplicate_clip_to_arrangement(clip, time)` accepts Session and arrangement clips, so moving a clip is duplicate plus `Track.delete_clip`. `arrangement_clips` come back ordered by start time.
-- **The arrangement extent cannot be resized.**
-  - Setting `end_marker` or `loop_end` on an arrangement clip changes its content length (`length`), but `end_time` stays fixed.
-  - Long sections are built by tiling copies.
+- **Resizing an arrangement clip** (corrected by WS-F):
+  - `end_marker` never changes a clip's extent.
+  - On a *non-looping* clip, `loop_end` is the clip end. So set `looping=False`, then `loop_end = loop_start + extent`, then `looping=True`. This resizes the extent both ways, and Live restores the loop region itself.
+  - This works in one tick for MIDI and warped audio (even past the sample end). Unwarped audio uses seconds and applies the new extent on the next tick.
+  - `arrange_from_scenes` therefore places one exactly sized looping clip per track per section, with envelopes and phase kept.
 - `Clip.quantize(5, 1.0)` works. The grid argument uses the `Song.RecordingQuantization` values (5 = 1/16), so use `values.QUANTIZE_GRID`.
 - `ClipSlot.create_audio_clip` on a MIDI track errors "Audio clips can only be created on audio tracks".
 
 ## Automation
 
-- **Arrangement clips cannot hold editable envelopes.** `automation_envelope` returns None, and `create_automation_envelope` raises "Not a session clip or parameter belongs to another track".
+- **Arrangement clips cannot get *new* envelopes.** `create_automation_envelope` raises "Not a session clip or parameter belongs to another track".
+  - An envelope that came with a Session clip copied into the arrangement is readable and editable there (corrected by WS-F).
+  - `clear_envelope` works on arrangement clips.
 - Session clips:
   - `create_automation_envelope(param)` and `insert_step(start, length, value)` work.
   - `Live.Envelope.EnvelopeEvent(time, value)` (positional or keyword; optional control coefficients for curves) plus `create_event(event)` work.
   - `value_at_time` returns parameter units.
   - `events_in_range` returns `(time, value)`, but for volume the stored value is an internal scale (0.25 reads back 0.036). Read with `value_at_time`; write in parameter units.
-- Envelopes travel with `duplicate_clip_to_arrangement` (`has_envelopes` True on the copy), so automate in Session clips and then place them. The copy's envelope cannot be edited afterwards.
+- Envelopes travel with `duplicate_clip_to_arrangement` (`has_envelopes` True on the copy), so automate in Session clips and then place them. The copy's envelopes stay editable.
 
 ## Rendering by resampling (the bounce engine)
 
@@ -228,6 +232,21 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
   - Core Library alone: 20.3k items in 0.6 s, cold.
   - With 12 packs: 48.2k items in 0.5 s, or 0.8 s when spread over 20 ms ticks (about 4 s wall clock).
   - The `full_refresh` listener never fired during testing. A pack-list poll and TTLs keep the search index fresh.
+
+## Arrangement and automation (WS-F)
+
+- `duplicate_clip_to_arrangement`, `create_midi_clip` and `create_audio_clip` overwrite their range like a paste: they split or trim existing clips and keep the content offset. They also **move the playhead** to that range at once, so every tool that pastes puts the playhead back when the transport is stopped.
+- Costs on the main thread: a duplicate takes about 23 ms, `delete_clip` about 12 ms, property writes under 1 ms. Long layouts are split into calls of at most about 0.9 s, and each call is one undo step.
+- Locators:
+  - `set_or_delete_cue` toggles at the *committed* playhead. A playhead write commits on the next tick, and writing the current value again is ignored.
+  - Neither the playhead nor `start_time` can go past the song length.
+  - The result is one command per locator.
+- Envelopes:
+  - `delete_events_in_range` includes both ends.
+  - Two events at the same time make a jump (a step).
+- **Default track names are renumbered by Live.**
+  - Names that follow the default pattern ("5-808 Core Kit", "3-Audio") are renumbered when tracks move or are deleted. After deleting track 5, "6-808 Core Kit" became "5-808 Core Kit".
+  - Give tracks explicit names (`create_track(name=...)`) before addressing them by name.
 
 ## Not yet spiked (owner)
 

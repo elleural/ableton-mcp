@@ -108,7 +108,8 @@ def test_sixteen_bit_output_is_dithered(tmp_path):
     dithered = release.encode(premaster, "wav16", str(tmp_path / "dithered.wav"), {"title": "x"})
     assert not np.any(decode(str(plain))[0])  # truncation alone gives digital silence
     noise = decode(dithered)[0]
-    assert np.count_nonzero(noise) > noise.size * 0.3 and np.abs(noise).max() <= 2.5 / 32768  # TPDF: within +-2 LSB
+    # TPDF: about a quarter of the samples non-zero at +-1 LSB (ffmpeg 6), half at +-2 LSB (ffmpeg 8)
+    assert np.count_nonzero(noise) > noise.size * 0.15 and np.abs(noise).max() <= 2.5 / 32768
 
 
 def test_artwork_in_other_image_formats_is_converted(tmp_path):

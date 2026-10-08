@@ -408,7 +408,8 @@ def test_undo_and_redo_count_steps():
             status_handlers.undo(Ctx(), steps=bad)
 
 
-def test_dialog_button_names():
+def test_dialog_button_names(monkeypatch):
+    monkeypatch.setattr(status_handlers, "SAVE_PROMPT_ORDER_VERIFIED", True)  # verified on macOS only
     prompt = 'Save changes to "Untitled" before closing?'
     index = status_handlers.dialog_button_index
     assert index(1, prompt, 3) == 1 and index("2", prompt, 3) == 2
@@ -417,9 +418,14 @@ def test_dialog_button_names():
     for bad, message, count in ((3, prompt, 3), ("cancel", "Something else", 2), ("save", "Something else", 3), (True, prompt, 3)):
         with pytest.raises(CommandError):
             index(bad, message, count)
+    monkeypatch.setattr(status_handlers, "SAVE_PROMPT_ORDER_VERIFIED", False)  # elsewhere only indices work
+    assert index(2, prompt, 3) == 2
+    with pytest.raises(CommandError):
+        index("save", prompt, 3)
 
 
-def test_respond_to_dialog():
+def test_respond_to_dialog(monkeypatch):
+    monkeypatch.setattr(status_handlers, "SAVE_PROMPT_ORDER_VERIFIED", True)
     with pytest.raises(CommandError) as error:
         status_handlers.respond_to_dialog(Ctx(), button=0)
     assert error.value.code == "not_found"

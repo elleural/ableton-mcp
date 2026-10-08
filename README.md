@@ -115,6 +115,31 @@ Live's API has no export function, so `bounce` renders **in real time inside Liv
 3. Writes tags and artwork.
 4. Saves the files with a `release.json` manifest to `~/Music/AbletonMCP/Releases/<artist> - <title>/`.
 
+### Listening loop
+
+The agent cannot hear, so the listening loop ([docs/listening-loop-prd.md](docs/listening-loop-prd.md)) lets it
+check its own work against a spec of the brief (key, progressions, loop lengths, layer tiers, loudness
+targets; the bundled one is NOVA's, `ears/specs/nova.spec.json`):
+
+| Tool | Does |
+|---|---|
+| `analyze_notes` | Checks the stem clips' notes: key, chord tones, semitone clashes between stems, loop lengths, grid, lead rests. Under a second, no audio |
+| `capture` | Records every stem's track output, the returns and the main mix in real time inside Live (Session recording on temporary `cap:` tracks), cuts the folded second cycle into a *take* and analyses it. Leaves the set as found |
+| `analyze_audio(take=...)` | Tier sums T1–T5 as the game layers them: −14 LUFS / −1 dBTP, key, mono sub, stems + returns cancel the mix, tempo consistency, tier ladder, masking, the game's analyser bands, phone survival; `strict` adds the delivery-file checks |
+| `compare` | Deltas between two takes (or against the spec), loudness-matched, each improved, regressed or within the measured noise; `blind` gives an X/Y packet for a fresh judge |
+| `takes` | The ledger of takes, `keep` the best one, `restore` an earlier take's notes and parameters |
+
+The analysis is the standalone `ears` package; its CLI runs without Live and doubles as the soundtrack's
+acceptance script:
+
+```bash
+uv run ears acceptance path/to/public/music/masters
+```
+
+Takes live in `<set folder>/ears/` for a saved set, else `~/Music/AbletonMCP/Ears/<set name>/` (`EARS_HOME`
+overrides). Verified capture behaviour and calibration are in [docs/spikes.md](docs/spikes.md) and
+[docs/listening-loop-calibration.md](docs/listening-loop-calibration.md).
+
 ## Limits of Live's API
 
 | Not possible through Live's API | What AbletonMCP does instead |
@@ -138,6 +163,7 @@ See [docs/DEVELOPING.md](docs/DEVELOPING.md) for the architecture, adding comman
 and the test layers:
 
 - **Offline unit and contract tests:** `uv run pytest tests/unit tests/contract`
+- **Listening loop analysis (ears) on synthetic fixtures:** `uv run pytest tests/ears` and `uv run ears calibrate`
 - **Live integration tests:** `uv run pytest tests/live`, against a running Live; they clean up after themselves.
 
 ## Credits

@@ -18,7 +18,7 @@ from MCP_Server.tools import export
 
 pytestmark = pytest.mark.skipif(not available(), reason="ffmpeg/ffprobe not installed")
 
-FAR = 800.0  # beats: bar 201 in 4/4, beyond any pre-existing material
+FAR = 800.0  # beats: bar 201 in 4/4; moved past the set's own arrangement when that is longer (material["far"])
 RATE = 44100
 BURSTS = (0.5, 1.0, 1.5)  # seconds after the clip start
 TRANSPORT = ["loop", "metronome", "record_mode", "arrangement_overdub", "punch_in", "punch_out", "session_automation_record",
@@ -93,18 +93,25 @@ def wait_for(phases, timeout=30.0):
             time.sleep(0.1)
 
 
+def far_from_material(live):
+    """Bar 201, or 16 bars past the open set's last arrangement event, so the set's own clips stay silent."""
+    last = live.send_command("lom_get", {"path": "live_set", "properties": ["last_event_time"]})["values"]["last_event_time"]["value"]
+    return max(FAR, float(int(last // 4) * 4 + 64))
+
+
 @pytest.fixture
 def material(live, scratch, song_state, tmp_path):
+    far = far_from_material(live)
     tone = scratch.track("Tone", kind="audio")
     clip = live.send_command("lom_call", {"path": track_path(live, tone), "method": "create_audio_clip",
-                                          "args": [write_bursts(tmp_path / "bursts.wav"), FAR]})["result"]["path"]
+                                          "args": [write_bursts(tmp_path / "bursts.wav"), far]})["result"]["path"]
     live.send_command("lom_set", {"path": clip, "property": "warping", "value": False})
     synth = scratch.track("Synth", kind="midi")
     live.send_command("lom_call", {"path": track_path(live, synth), "method": "insert_device", "args": ["Operator"]})
-    live.send_command("lom_call", {"path": track_path(live, synth), "method": "create_midi_clip", "args": [FAR, 8.0]})
+    live.send_command("lom_call", {"path": track_path(live, synth), "method": "create_midi_clip", "args": [far, 8.0]})
     live.send_command("lom_set", {"path": track_path(live, synth), "property": "arm", "value": True})
     empty = scratch.track("No instrument", kind="midi")
-    yield {"tone": tone, "synth": synth, "empty": empty, "out": tmp_path / "out"}
+    yield {"tone": tone, "synth": synth, "empty": empty, "out": tmp_path / "out", "far": far}
     try:  # never leave a bounce running or its tracks behind, even when a test fails
         export.cancel_bounce()
     except ToolError:
@@ -115,10 +122,10 @@ def test_bounce_master_and_stems_end_to_end(live, material):
     tempo = get(live, "live_set", "tempo")["tempo"]
     before = snapshot(live)
     started = time.time()
-    job = export.bounce(start=FAR, end=FAR + 8, tail=0, stems=[material["tone"], material["synth"]], name="export test",
+    job = export.bounce(start=material["far"], end=material["far"] + 8, tail=0, stems=[material["tone"], material["synth"]], name="export test",
                         output_dir=str(material["out"]))
     assert job["phase"] == "route" and job["stems"] == [material["tone"], material["synth"]]
-    assert job["range"]["start"] == {"beats": FAR, "bar": "201.1.1"} and job["duration_seconds"] == pytest.approx(8 * 60.0 / tempo)
+    assert job["range"]["start"] == {"beats": material["far"], "bar": "{0}.1.1".format(int(material["far"] // 4) + 1)} and job["duration_seconds"] == pytest.approx(8 * 60.0 / tempo)
     done = wait_for(("done", "failed", "cancelled"))
     elapsed = time.time() - started
     assert done["phase"] == "done", done
@@ -160,23 +167,23 @@ def test_bounce_master_and_stems_end_to_end(live, material):
 def test_cancel_interrupt_and_errors(live, material):
     before = snapshot(live)
     with pytest.raises(ToolError, match="must be after"):
-        export.bounce(start=FAR + 8, end=FAR)
+        export.bounce(start=material["far"] + 8, end=material["far"])
     with pytest.raises(ToolError, match="no audio output"):
-        export.bounce(start=FAR, end=FAR + 4, stems=[material["empty"]])
+        export.bounce(start=material["far"], end=material["far"] + 4, stems=[material["empty"]])
     with pytest.raises(AbletonError):
         live.send_command("bounce_cleanup", {"job_id": "bounce-0"})
     info = live.send_command("bounce_song_info")
     assert info["tempo"] > 0 and "locators" in info and info["default_end"]["beats"] >= info["last_event"]["beats"]
 
-    export.bounce(start=FAR, end=FAR + 16, tail=0, name="cancelled", output_dir=str(material["out"]))
+    export.bounce(start=material["far"], end=material["far"] + 16, tail=0, name="cancelled", output_dir=str(material["out"]))
     with pytest.raises(ToolError, match="still"):
-        export.bounce(start=FAR, end=FAR + 4)
+        export.bounce(start=material["far"], end=material["far"] + 4)
     assert wait_for(("recording",), timeout=10)["phase"] == "recording"
     cancelled = export.cancel_bounce()
     assert cancelled["phase"] == "cancelled" and cancelled["removed_tracks"]
     assert_same_state(before, snapshot(live))
 
-    export.bounce(start=FAR, end=FAR + 16, tail=0, stems=[material["tone"]], name="interrupted", output_dir=str(material["out"]))
+    export.bounce(start=material["far"], end=material["far"] + 16, tail=0, stems=[material["tone"]], name="interrupted", output_dir=str(material["out"]))
     assert wait_for(("recording",), timeout=10)["phase"] == "recording"
     live.send_command("lom_call", {"path": "live_set", "method": "stop_playing", "args": []})  # someone presses Stop
     failed = wait_for(("failed", "done", "cancelled"), timeout=10)

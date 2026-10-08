@@ -66,7 +66,12 @@ audibly) and returns a job; poll get_bounce_status(wait=50) until phase is "done
 "cancelled". Polling also delivers the files and removes the temporary tracks. create_release normalises \
 loudness (default -14 LUFS, -1 dBTP) and encodes WAV, FLAC, MP3 and AAC with tags.
 
-Saving: save_set needs macOS UI-automation permission; if it is unavailable, ask the user to press Cmd+S.
+Listening loop (you cannot hear, so check): after note edits run analyze_notes; after sound or mix \
+changes run capture (one tempo; it returns the audio checks). Clear fails first. Keep a change only when \
+compare("latest", "best") shows nothing regressed beyond noise (takes(action="keep")), else \
+takes(action="restore"). Passing checks is not "sounds good": say so.
+
+Saving: save_set needs macOS UI-automation permission; if unavailable, ask the user to press Cmd+S.
 
 Habits: read before you write (get_track, get_device and get_notes show values and valid options). Errors \
 start with a code such as [not_found] or [busy] and say what is valid. Most mutating calls are one undo \

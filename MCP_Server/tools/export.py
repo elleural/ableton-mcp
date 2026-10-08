@@ -152,16 +152,21 @@ def _live_locator_sections(duration):
 
 
 @tool(read_only=True)
-def analyze_audio(path: str, sections: list[dict] | str | None = None, images: bool = False) -> list | dict:
-    """Measure an audio file so you can judge a mix without hearing it.
+def analyze_audio(path: str | None = None, sections: list[dict] | str | None = None, images: bool = False,
+                  take: str | None = None, strict: bool = False, spec: str | None = None) -> list | dict:
+    """Measure audio so you can judge a mix without hearing it: a file (path) or a listening-loop take.
 
-    Returns loudness (integrated LUFS, range LU, true peak dBTP, short-term and momentary max), levels
-    (sample peak, RMS, crest factor, DC offset, clipped samples), stereo (correlation -1..1; width =
-    side/mid RMS, 0 = mono), spectrum (% of energy: sub <60 Hz, low 60-250, low_mid 250-2k, high_mid 2k-6k,
-    high >6k), a short-term loudness curve, dropouts and plain-language notes. sections: "locators" (the
-    bounce's locators, else Live's from 1.1.1) or [{name, start, end}] in seconds, for loudness per section.
-    images=True adds a spectrogram and a waveform (PNG).
+    path: loudness (LUFS, LU, dBTP), levels, stereo, spectrum (% per band), a loudness curve, dropouts and notes;
+    sections: "locators" or [{name, start, end}] in seconds. take (id or "latest", from capture): the spec's
+    checks on tier sums T1..T5 (game-style looping): loudness -14 LUFS / -1 dBTP, key, mono sub, stems+returns
+    cancel the mix, tempo consistency; reports tier ladder, masking, analyser bands, phone survival.
+    strict adds delivery-file checks (duration, seam, start, 48 kHz/24-bit). images=True adds two PNGs.
     """
+    if take is not None:
+        from .listening import take_report
+        return take_report(take, strict=strict, images=images, spec=spec)
+    if not path:
+        raise ToolError("Give path (an audio file) or take (a listening-loop take id)")
     full = _audio_errors(check_file, path)
     chosen, by_locators = None, isinstance(sections, str)
     if by_locators:

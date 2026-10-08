@@ -13,7 +13,8 @@ AREAS = [
     ("status", "Status and overview"), ("project", "Project lifecycle"), ("song", "Song, transport, scenes, locators, grooves, selection"),
     ("tracks", "Tracks, mixer and routing"), ("devices", "Devices and racks"), ("browser", "Browser"),
     ("clips", "Clips and notes"), ("automation", "Automation"), ("arrangement", "Arrangement"),
-    ("export", "Export, analysis and release"), ("theory", "Music theory"), ("lom", "Object-model escape hatch"),
+    ("export", "Export, analysis and release"), ("listening", "Listening loop"), ("theory", "Music theory"),
+    ("lom", "Object-model escape hatch"),
 ]
 
 

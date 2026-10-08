@@ -345,7 +345,9 @@ checks Live, the port, the script version, ffmpeg and permissions.
 - 100% of registered commands are exercised by live tests.
 - No main-thread command takes more than 2 s.
 - The agent never needs `lom_*` for J1–J7.
-- The tool catalogue stays at or below 80 tools, and server instructions at or below 600 words.
+- The tool catalogue stays at or below 80 tools, and server instructions at or below 600 words. The listening loop
+  ([listening-loop-plan.md](listening-loop-plan.md)) adds a module of up to 10 tools across its phases, so the
+  contract test's budget is 90.
 
 ## 12. Risks
 

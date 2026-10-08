@@ -1,6 +1,6 @@
 ---
 name: listening-loop
-description: How a composing agent checks its own music in Ableton Live through the ableton MCP when it cannot hear - after note edits (analyze_notes), after sound or mix changes (capture, analyze_audio take), before keeping a change (compare against best, takes keep or restore), before calling stems done (tempo sweep, solo mode, blind A/B by a fresh subagent). Use whenever you compose, sound-design or mix with the ableton tools.
+description: How a composing agent checks its own music in Ableton Live through the ableton MCP when it cannot hear - after note edits (analyze_notes), after sound or mix changes (capture, analyze_audio take), before keeping a change (compare against best, takes keep or restore), before calling stems done (tempo sweep, solo mode, blind A/B by a fresh subagent), and against the references the user named (ref, compare refs). Use whenever you compose, sound-design or mix with the ableton tools.
 ---
 
 # Listening loop protocol
@@ -24,9 +24,17 @@ audio and differences between takes (docs/listening-loop-prd.md section 12). The
 5. **At milestones:** `capture(mode="solo")` (each stem with its return effects and the master chain; about 4
    minutes per tempo), and `compare(..., blind=True)`: give only the packet to a fresh subagent that does not
    know which take is new, and read the key file after its verdict.
-6. **Claim only what the evidence supports.** Passing every check does not mean it sounds good. A
+6. **Against the references** (outside music the user named, measured once and kept as numbers):
+   `compare("latest", "refs")` places the top tier's band balance, dynamics (loudness range, peak to
+   loudness, short-term spread), stereo width and onset density inside, above or below the range the
+   references span; `audio.balance` warns outside it. It is a direction, not a target: a game stem sum at
+   -14 LUFS is meant to be less dense than a club master, so dynamics come back as information.
+   `compare("latest", "refs:sparse")` puts tier T2 against the references' sparse sections. `ref(action="list")` shows the references; a new
+   one is `ref(action="measure", uri=<Spotify track>)`, which plays it in the Spotify app for as long as the
+   track lasts (stop Live first; call `ref()` to keep waiting).
+7. **Claim only what the evidence supports.** Passing every check does not mean it sounds good. A
    subjective claim needs a blind verdict or the user's ear.
-7. **The human listening check stays the release gate** (soundtrack PRD section 10).
+8. **The human listening check stays the release gate** (soundtrack PRD section 10).
 
 Reading the audio report:
 
@@ -39,4 +47,7 @@ Reading the audio report:
 - Captures run at Live's sample rate (44.1 kHz here); delivery files must be 48 kHz, 24-bit
   (`analyze_audio(take=..., strict=True)` or `uv run ears acceptance <masters>` checks exported files).
 
-Not available yet: audio-model listeners (`listen`, `ab_test`) and references (`ref_add`, `meter`).
+- Reference numbers are level-independent: a streamed track's level is the player's, so it carries no
+  loudness figure; `meter(source="live")` measures Live's output through the same loopback.
+
+Not available yet: audio-model listeners (`listen`, `ab_test`).

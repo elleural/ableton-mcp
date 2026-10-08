@@ -12,6 +12,7 @@ Raise errors.CommandError for problems the caller can fix.
 """
 import importlib
 import inspect
+import os
 import time
 import traceback
 
@@ -20,6 +21,7 @@ try:
 except ImportError:  # pragma: no cover - Live 12 runs Python 3
     import Queue as queue
 
+from . import journal
 from .errors import CommandError
 
 SCRIPT_VERSION = "2.0.0"
@@ -144,8 +146,10 @@ def run_on_main_thread(cs, func, timeout):
     return outcome[1]
 
 
-def execute(cs, spec, params):
+def execute(cs, spec, params, number=None):
     """Run a validated command on the current (main) thread, as one undo step if it mutates."""
+    if number is not None:
+        journal.run(number)
     ctx = Context(cs)
     if not spec.undo:
         return spec.func(ctx, **params)
@@ -157,20 +161,24 @@ def execute(cs, spec, params):
         song.end_undo_step()
 
 
-def _run_batch(cs, params):
+def _run_batch(cs, params, number=None):
     commands = params.get("commands") or []
     stop_on_error = params.get("stop_on_error", True)
     results = []
+    if number is not None:
+        journal.run(number)
     song = cs.song()
     song.begin_undo_step()
     try:
-        for item in commands:
+        for index, item in enumerate(commands, 1):
             name = item.get("type")
             spec = COMMANDS.get(name)
             try:
                 if spec is None:
                     raise CommandError("not_found", "Unknown command: {0}".format(name))
                 item_params = item.get("params") or {}
+                if number is not None:
+                    journal.item(number, index, name, item_params)
                 validate(spec, item_params)
                 results.append({"status": "success", "result": spec.func(Context(cs), **item_params)})
             except CommandError as error:
@@ -191,22 +199,29 @@ def dispatch(cs, request):
     """Handle one request (called on a socket thread). Always returns a response dict."""
     command_type = request.get("type", "")
     params = request.get("params") or {}
+    number = journal.start(command_type, params, request.get("client"))
+    started = time.time()
+    status, detail = "ok", ""
     try:
         if command_type == "batch":
-            result = run_on_main_thread(cs, lambda: _run_batch(cs, params), float(params.get("timeout", 30.0)))
+            result = run_on_main_thread(cs, lambda: _run_batch(cs, params, number), float(params.get("timeout", 30.0)))
         else:
             spec = COMMANDS.get(command_type)
             if spec is None:
                 raise CommandError("not_found", "Unknown command: {0}".format(command_type),
                                    hint="get_commands lists every command; the MCP server and Remote Script may be different versions")
             validate(spec, params)
-            result = run_on_main_thread(cs, lambda: execute(cs, spec, params), spec.timeout)
+            result = run_on_main_thread(cs, lambda: execute(cs, spec, params, number), spec.timeout)
         return {"status": "success", "result": result}
     except CommandError as error:
+        status, detail = "error", "[{0}] {1}".format(error.code, error.message)
         return _error_response(error)
     except Exception as error:
+        status, detail = "error", "{0}: {1}".format(error.__class__.__name__, error)
         cs.log_message("AbletonMCP dispatch error:\n" + traceback.format_exc())
         return _error_response(CommandError("live_error", str(error) or error.__class__.__name__))
+    finally:
+        journal.end(number, status, started, detail)
 
 
 def tick(cs):
@@ -231,4 +246,6 @@ def load_handlers():
             loaded.append(module_name)
         except Exception:
             failed[module_name] = traceback.format_exc(limit=6)
+    journal.event("load", "core {0}, {1} commands, {2} failed module(s), pid {3}".format(
+        SCRIPT_VERSION, len(COMMANDS), len(failed), os.getpid()))
     return {"loaded": loaded, "failed": failed, "command_count": len(COMMANDS)}

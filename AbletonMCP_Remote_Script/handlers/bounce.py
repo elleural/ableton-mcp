@@ -27,9 +27,11 @@ import re
 import time
 import traceback
 
-from .. import refs, values
+from .. import journal, refs, values
 from ..core import command, ticker
 from ..errors import CommandError
+
+LABEL = "bounce"   # journal name of this engine
 
 PREFIX = "[bounce] "
 MASTER_STEM = "Master"
@@ -366,6 +368,7 @@ def _job(ctx):
 
 
 def _set_phase(job, phase):
+    journal.event("phase", "{0} {1}: {2} -> {3}".format(LABEL, job.get("id"), job.get("phase"), phase))
     job["phase"] = phase
     job["_internal"]["phase_since"] = _now()
     job["_internal"]["ticks"] = 0
@@ -439,6 +442,7 @@ def _abort_finish(ctx, song, job):
         job["warnings"].append("Cleanup problems: " + "; ".join(problems))
     job["phase"] = "cancelled" if job.get("cancelled") else "failed"
     job["finished_at"] = _now()
+    journal.event("phase", "{0} {1}: {2}".format(LABEL, job.get("id"), job["phase"]))
 
 
 # ---------------------------------------------------------------------------
@@ -719,6 +723,7 @@ def _phase_verifying(ctx, song, job):
     job["restored"] = not mismatches
     job["phase"] = "recorded"
     job["finished_at"] = _now()
+    journal.event("phase", "{0} {1}: recorded".format(LABEL, job.get("id")))
 
 
 def _phase_aborting(ctx, song, job):

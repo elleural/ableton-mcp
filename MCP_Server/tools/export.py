@@ -8,6 +8,7 @@ from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..app import call, tool
+from .references import loopback_busy
 from ..audio import analysis, release, render
 from ..audio.ffmpeg import AudioError, check_file, find_tool, probe
 from ..audio.images import spectrogram_png, waveform_png
@@ -98,6 +99,9 @@ def bounce(start: float | str = 0, end: float | str | None = None, tail: float |
         raise ToolError("{0} Bounces need it to deliver their files.".format(error))
     if output_dir:
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
+    busy = loopback_busy()
+    if busy:
+        raise ToolError(busy)
     job = call("bounce_start", start=start, end=end, tail=tail, stems=stems, include_returns=include_returns,
                name=name, output_dir=output_dir, timeout=40)
     out = _summary(job)

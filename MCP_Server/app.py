@@ -69,7 +69,8 @@ loudness (default -14 LUFS, -1 dBTP) and encodes WAV, FLAC, MP3 and AAC with tag
 Listening loop (you cannot hear, so check): after note edits run analyze_notes; after sound or mix \
 changes run capture (one tempo; it returns the audio checks). Clear fails first. Keep a change only when \
 compare("latest", "best") shows nothing regressed beyond noise (takes(action="keep")), else \
-takes(action="restore"). Passing checks is not "sounds good": say so.
+takes(action="restore"). Against outside music: ref(action="measure", uri=<Spotify track>) measures it \
+once (numbers only), then compare(take, "refs"). Passing checks is not "sounds good": say so.
 
 Saving: save_set needs macOS UI-automation permission; if unavailable, ask the user to press Cmd+S.
 

@@ -12,6 +12,8 @@ the spec ("spec": the brief's targets), or a reference section ("ref:<name>:<sec
   order, no ids, times or statuses.
 - Against a mastered reference, crest factor and loudness range are information only (a master is
   denser than an unlimited stem sum; the brief's -14 LUFS and -1 dBTP win).
+- Against the references' envelope ("refs"): the take's tier profile (ears.profile, level-independent)
+  inside, above or below the range the references span, band by band and metric by metric.
 """
 import json
 import math
@@ -19,6 +21,7 @@ import random
 from pathlib import Path
 
 from . import loudness, measure, report, tiers
+from . import profile as profiles
 
 # metric -> (better direction: +1 higher is better, -1 lower is better, 0 closer to target / no direction)
 DIRECTIONS = {
@@ -231,6 +234,101 @@ def compare_reference(a, ref, spec, variation=None):
             deltas.append({"metric": key, "take": mine, "reference": ref[key], "status": "information only (a master is denser than a stem sum)"})
     deltas.sort(key=lambda item: -abs(item.get("delta") or 0))
     return {"deltas": report.clean(deltas)}
+
+
+ENVELOPE_LABELS = {
+    "lra": "loudness range (LU)", "plr_db": "peak to loudness (dB)", "crest_db": "crest factor (dB)",
+    "dynamics_spread": "short-term loudness spread (LU)", "width": "stereo width", "correlation": "stereo correlation",
+    "mono_sub_loss_db": "mono sub loss (dB)", "onset_rate": "onsets per second",
+}
+# Against mastered references these are information only (PRD section 9): a master is denser than a stem sum
+# that has to land at -14 LUFS, so being "below" them is no defect.
+DYNAMICS = ("lra", "plr_db", "crest_db", "dynamics_spread")
+# Which tier a section kind is compared with by default (PRD 11.1): full sections against the top tier, sparse
+# ones against a lower tier (pad, arp and bass).
+DEFAULT_TIERS = {"full": None, "track": None, "sparse": "T2"}
+
+
+def tier_profile(a, spec, variation=None, tier=None):
+    """The level-independent profile of one tier sum of a take (default: its top tier)."""
+    set_name = spec.set_name(a.set)
+    variation = variation or a.variations[0]
+    sums, _ = tiers.tier_sums(a.parts(), spec, set_name, variation, a.tempo, bars=a.part_bars())
+    if not sums:
+        raise ValueError("Take {0} has no tier sums for variation {1}".format(a.id, variation))
+    tier = tier or list(sums)[-1]
+    if tier not in sums:
+        raise ValueError("Take {0} has no tier {1} (it has {2})".format(a.id, tier, ", ".join(sums)))
+    values = profiles.profile(sums[tier], spec.a4_hz, float(spec.target("bass_crossover_hz", 120.0)), absolute=False)
+    return tier, variation, values
+
+
+def _place(value, low, high):
+    if value < low:
+        return "below", round(value - low, 2)
+    if value > high:
+        return "above", round(value - high, 2)
+    return "inside", 0.0
+
+
+def compare_envelope(a, env, spec, variation=None, tier=None, profile=None):
+    """A take's tier against the range the references span (ears.refs.envelope).
+
+    bands: each third octave inside, above or below ("absent" when the take has nothing there), outside first;
+    shape: stereo width, correlation, mono-sub loss and onset rate, counted like the bands; dynamics: loudness
+    range, peak to loudness, crest and short-term spread, information only (references are masters). Tempo and
+    key are information. `outside` and the summary count bands and shape only.
+    """
+    if tier is None:
+        tier = DEFAULT_TIERS.get(env.get("kind"))
+    if profile is None:
+        tier, variation, profile = tier_profile(a, spec, variation, tier)
+    if profile.get("silent"):
+        raise ValueError("The take's {0} is silent; nothing to compare".format(tier or "top tier"))
+    bands, shape, dynamics = [], [], []
+    measured = profile.get("third_octave") or {}
+    for band, (low, high) in (env.get("third_octave") or {}).items():
+        value = measured.get(band)
+        if value is None:
+            bands.append({"metric": "{0} Hz band (dB re mix)".format(band), "take": None, "low": low, "high": high,
+                          "status": "absent"})
+            continue
+        status, delta = _place(value, low, high)
+        bands.append({"metric": "{0} Hz band (dB re mix)".format(band), "take": value, "low": low, "high": high,
+                      "delta": delta, "status": status})
+    for key, span in (env.get("scalars") or {}).items():
+        value = profile.get(key)
+        if value is None:
+            continue
+        status, delta = _place(value, span["low"], span["high"])
+        row = {"metric": ENVELOPE_LABELS.get(key, key), "take": value, "low": span["low"], "high": span["high"],
+               "typical": span.get("typical"), "delta": delta, "status": status}
+        if key in DYNAMICS:
+            row["status"] = "information ({0})".format(status)
+            dynamics.append(row)
+        else:
+            shape.append(row)
+    order = lambda row: (row["status"] == "inside", -abs(row.get("delta") or 0.0))
+    bands.sort(key=order)
+    shape.sort(key=order)
+    take_tempo = getattr(a, "tempo", None) or (profile.get("tempo") or {}).get("bpm")
+    ref_tempi = [value for value in env.get("tempo") or [] if value]
+    information = {"tempo": {"take": take_tempo, "references": ref_tempi,
+                             "same_as": [value for value in ref_tempi if profiles.same_tempo(take_tempo, value)]},
+                   "key": {"take": (profile.get("key") or {}).get("key"), "references": env.get("keys") or []}}
+    bands_out = [row for row in bands if row["status"] != "inside"]
+    shape_out = [row for row in shape if row["status"] != "inside"]
+    summary = "{0} of {1} bands outside the references".format(len(bands_out), len(bands))
+    measurable = [row for row in bands_out if row.get("delta") is not None]
+    if measurable:
+        worst = max(measurable, key=lambda row: abs(row["delta"]))
+        summary += " (largest {0:+.1f} dB at {1})".format(worst["delta"], worst["metric"].split(" Hz")[0] + " Hz")
+    if shape_out:
+        summary += "; outside on " + ", ".join(row["metric"] for row in shape_out)
+    return {"tier": tier, "variation": variation, "kind": env.get("kind"), "references": env.get("references") or [],
+            "summary": summary, "outside": len(bands_out) + len(shape_out),
+            "bands": report.clean(bands), "shape": report.clean(shape), "dynamics": report.clean(dynamics),
+            "information": information}
 
 
 def blind_packet(result, a_id, b_id, seed=None):

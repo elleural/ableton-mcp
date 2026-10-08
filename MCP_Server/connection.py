@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import threading
 import time
 
@@ -11,6 +12,17 @@ HOST = os.environ.get("ABLETON_MCP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("ABLETON_MCP_PORT", "9877"))
 DEFAULT_TIMEOUT = 30.0
 CONNECT_TIMEOUT = 3.0
+
+
+def _client_name():
+    """Who is asking, for the Remote Script's command journal: "ableton-mcp:4242", "pytest:4243", "python:4244"."""
+    program = os.path.basename(sys.argv[0] or "") if sys.argv else ""
+    if not program or program.startswith("-"):      # python -c / python - (stdin)
+        program = "python"
+    return os.environ.get("ABLETON_MCP_CLIENT") or "{0}:{1}".format(program, os.getpid())
+
+
+CLIENT = _client_name()
 
 logger = logging.getLogger("ableton_mcp.connection")
 
@@ -91,7 +103,8 @@ class AbletonConnection(object):
         timeout = DEFAULT_TIMEOUT if timeout is None else timeout
         with self._lock:
             request_id = next(self._ids)
-            payload = (json.dumps({"id": request_id, "type": command_type, "params": params or {}}) + "\n").encode("utf-8")
+            request = {"id": request_id, "type": command_type, "params": params or {}, "client": CLIENT}
+            payload = (json.dumps(request) + "\n").encode("utf-8")
             response = self._exchange(payload, request_id, timeout)
         if response.get("status") == "error":
             error = response.get("error") or {}

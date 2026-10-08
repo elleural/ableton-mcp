@@ -328,3 +328,43 @@ Snapshot and restore (`listening_snapshot`, `listening_restore`):
   full dry-run restore 0.5 s round trip.
 - The shell decoded a request after every received chunk, quadratic in its size (750 ms for 1.6 MB); it now
   decodes once the line is complete.
+
+## Meter and references (2026-10-08, Scarlett Solo 4th Gen, 44.1 kHz)
+
+Phase 4 of [listening-loop-prd.md](listening-loop-prd.md) §11.2. These results resolve its two [verify] items as far as
+the hardware goes; the Spotify one waits on a permission (below).
+
+- **The interface.** PortAudio lists the Scarlett Solo 4th Gen with 4 inputs at 44.1 kHz (Live's rate): 1-2 analogue,
+  3-4 Loopback (what the Mac plays). The meter opens only inputs 3-4 (`CoreAudioSettings(channel_map=[2, 3])`), never
+  changes the device's rate or buffer (`change_device_parameters=False`) and refuses a rate conversion
+  (`fail_if_conversion_required=True`), so it reads exactly what the Mac played.
+- **A second process can read the inputs while Live holds the device** ([verify] 2). Live kept running and playing
+  while Python read inputs 3-4.
+- **The loopback is bit-transparent.** A −30 dBFS 1 kHz tone played by `afplay` (the system path Spotify uses) read back
+  at −30.000 dBFS peak and −33.010 dBFS RMS (expected −33.010), 1.5000 s long to the sample. Digital silence reads as
+  exact zeros (−240 dBFS), which is how the meter checks that nothing else plays before it measures.
+- **Calibration tone through Live** (PRD: within ±0.1 dB): a −24 dBFS 1 kHz tone on a soloed, unwarped scratch track
+  reads within 0.1 dB in peak and RMS (`tests/live/test_meter.py`).
+- **M3, one chain for both sides.** A NOVA-like top tier played by Live and metered through the loopback measures the
+  same as offline: integrated loudness within 0.1 LU, true peak within 0.2 dB, every third-octave band within 0.2 dB,
+  loudness range, peak to loudness, crest, width, correlation, mono-sub loss, onset rate, tempo and key unchanged.
+- **Microphone permission.** macOS reports audio-input access as already granted to this Claude app (AVCaptureDevice
+  status 3), so reading the inputs raised no prompt. A denied permission would deliver silence, which the meter reports
+  as "No signal".
+- **Spotify by AppleScript** ([verify] 1): the first Apple Event to Spotify waits on macOS's "allow this app to control
+  Spotify" prompt; until it is answered every call times out (the player reports this). Not yet verified past the prompt.
+- **Spotify's settings file** no longer holds normalisation or crossfade (`audio.crossfade_migrated_to_ps=true`), so M6
+  cannot be read from disk; Frederic confirms it once (`ref(action="setup", confirm=True)`).
+- **Alert sounds.** macOS's default *system* output (alerts) is the Scarlett, so an alert during a measurement would be
+  measured; `ref(action="setup")` warns until "Play sound effects through" points elsewhere.
+- **Scene changes crashed Live once.** The live suite's scratch cleanup deleted 3 tracks, a return and 2 scenes in one
+  main-thread tick and Live 12.4.6 died (FatalError `std::out_of_range` vector; `atos` on the logged stack resolves
+  `LSong::OnSceneTransactionCounterChanged` called from a Boost.Python call; the macOS crash report shows the same
+  main-thread stack: Live's 10 ms timer, the Remote Script's Python, a Live API call, then the scene handler, whose
+  exception hit a no-throw boundary and called `std::terminate`). The nearest symbols put that Live API call among the
+  Scene bindings, which fits the batch's `delete_scene` calls. It is the only FatalError in Live's log since 2026-10-06,
+  after 24 hours of uptime with thousands of commands. The cleanup now deletes one object per round trip, the meter
+  test creates no scene, every command is journaled (`ableton-mcp journal --crash`), and
+  `scripts/repro_scene_crash.py` rebuilds the state on a saved set to narrow it down. Not reproduced yet.
+- **Crash recovery re-arms tracks.** Recovery replays the undo history, which does not record arm changes: every track
+  created armed came back armed (21 on the NOVA set), duplicated ones did not.

@@ -32,6 +32,8 @@ WINDOW_SECONDS = 10.0
 FULL_LU = 3.0                  # windows within this of the loudest are a track's full sections ...
 SPARSE_LU = 12.0               # ... down to this, its sparse ones; quieter windows (intros, breaks) are neither
 SOURCES = ("external", "live", "file")
+MIN_SECONDS = 3.0              # loudness range and short-term loudness need 3 s windows
+STALL_SECONDS = 2.5            # an input that delivers nothing for this long has stopped (unplugged, asleep)
 
 
 class MeterError(Exception):
@@ -114,11 +116,12 @@ class LoopbackInput(object):
 
     def record(self, seconds, stop=None, progress=None, started=None):
         """Read `seconds` into memory. stop: a threading.Event that ends early; progress(seconds_read) is called
-        about every 0.2 s and ends early when it returns False; started() is called once the stream runs."""
+        about every 0.2 s and ends early when it returns False; started() is called once the stream runs.
+        Raises MeterError when the input stops delivering audio (STALL_SECONDS without a block)."""
         sd = self._sd
         frames = max(1, int(round(float(seconds) * self.rate)))
         buffer = np.zeros((frames, 2), dtype=np.float32)
-        state = {"position": 0, "dropouts": 0}
+        state = {"position": 0, "dropouts": 0, "last_block": None}
         finished = threading.Event()
         first, second = self.channels[0] - 1, self.channels[1] - 1
 
@@ -131,6 +134,7 @@ class LoopbackInput(object):
                 block = indata[:n] if indata.shape[1] == 2 else indata[:n, [first, second]]
                 buffer[position:position + n] = block
                 state["position"] = position + n
+            state["last_block"] = time.time()
             if state["position"] >= frames:
                 raise sd.CallbackStop
 
@@ -146,14 +150,28 @@ class LoopbackInput(object):
                                     finished_callback=finished.set)
         except Exception as error:   # PortAudioError and friends
             raise MeterError("Cannot open {0} at {1} Hz: {2}".format(self.info["name"], self.rate, error))
-        with stream:
+        try:
+            try:
+                stream.start()
+            except Exception as error:
+                raise MeterError("Cannot start {0}: {1}".format(self.info["name"], error))
             if started:
                 started()
+            state["last_block"] = state["last_block"] or time.time()
             while not finished.wait(0.2):
                 if stop is not None and stop.is_set():
                     break
                 if progress is not None and progress(state["position"] / float(self.rate)) is False:
                     break
+                if time.time() - max(state["last_block"], 0.0) > STALL_SECONDS:
+                    raise MeterError("{0} stopped delivering audio after {1:.1f} s (unplugged, reset, or the Mac "
+                                     "went to sleep?)".format(self.info["name"], state["position"] / float(self.rate)))
+        finally:
+            try:
+                if stream.active:
+                    stream.abort()
+            finally:
+                stream.close()
         return Recording(buffer[:state["position"]], self.rate, state["dropouts"])
 
 
@@ -286,6 +304,8 @@ def meter(source, seconds, kind="external", a4_hz=440.0, crossover_hz=120.0, sto
     if kind not in ("external", "live"):
         raise MeterError("kind must be external or live")
     started = time.time()
+    if float(seconds) < MIN_SECONDS:
+        raise MeterError("Measure at least {0:g} s".format(MIN_SECONDS))
     recording = source.record(seconds, stop=stop, progress=progress)
     samples, rate, dropouts = recording.samples, recording.rate, recording.dropouts
     del recording
@@ -294,7 +314,11 @@ def meter(source, seconds, kind="external", a4_hz=440.0, crossover_hz=120.0, sto
         raise MeterError("No signal on {0}: nothing played during the measurement".format(source.describe()["device"]))
     audio = Audio(samples[start:], rate)
     del samples
+    if audio.duration < MIN_SECONDS:
+        raise MeterError("Only {0:.1f} s of signal after the lead-in; measure longer".format(audio.duration))
     values = profiles.profile(audio, a4_hz, crossover_hz, absolute=kind != "external")
+    if values.get("silent"):
+        raise MeterError("The signal is too quiet to measure (below the loudness gate)")
     result = {"source": kind, "chain": source.describe(), "seconds": round(audio.duration, 2),
               "lead_in_seconds": round(start / float(rate), 3), "dropouts": dropouts,
               "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "elapsed": round(time.time() - started, 1),

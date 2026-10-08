@@ -815,16 +815,21 @@ def test_ledger_is_append_only_history(tmp_path):
     assert after.startswith(before) and len(after.splitlines()) == 3
 
 
-def test_left_behind_points_at_the_untitled_home_after_a_first_save(tmp_path, monkeypatch):
+def test_left_behind_points_at_the_untitled_home_only_for_the_same_set(tmp_path, monkeypatch):
     import ears
     monkeypatch.delenv("EARS_HOME", raising=False)
     monkeypatch.setattr(ears, "DEFAULT_ROOT", tmp_path / "Ears")
     set_path = tmp_path / "NOVA Project" / "NOVA.als"
-    assert ears.left_behind(str(set_path), "NOVA") is None                 # nothing was recorded untitled
-    (tmp_path / "Ears" / "untitled").mkdir(parents=True)
-    (tmp_path / "Ears" / "untitled" / "ledger.jsonl").write_text("{}\n")
-    assert ears.left_behind(str(set_path), "NOVA") == tmp_path / "Ears" / "untitled"
-    assert ears.left_behind(None, None) is None                             # still unsaved: that is its home
+    nova = ["kick", "perc", "pad", "bassA", "bassB"]
+    assert ears.left_behind(str(set_path), "NOVA", nova) is None              # nothing was recorded untitled
+    untitled = tmp_path / "Ears" / "untitled"
+    (untitled / "takes" / "neon-140-AB-0001").mkdir(parents=True)
+    (untitled / "ledger.jsonl").write_text("{}\n")
+    (untitled / "takes" / "neon-140-AB-0001" / "snapshot.json").write_text(json.dumps({"tracks": [{"name": n} for n in nova]}))
+    assert ears.left_behind(str(set_path), "NOVA", nova + ["new track"]) == untitled
+    assert ears.left_behind(str(set_path), "Other", ["drums", "keys", "pad"]) is None   # another set: not its takes
+    assert ears.left_behind(None, None, nova) is None                        # still unsaved: that is its home
+    assert ears.left_behind(str(set_path), "NOVA", None) is None             # no evidence, no hint
     (tmp_path / "NOVA Project" / "ears").mkdir(parents=True)
     (tmp_path / "NOVA Project" / "ears" / "ledger.jsonl").write_text("{}\n")
-    assert ears.left_behind(str(set_path), "NOVA") is None                 # the saved set has its own takes now
+    assert ears.left_behind(str(set_path), "NOVA", nova) is None             # the saved set has its own takes now

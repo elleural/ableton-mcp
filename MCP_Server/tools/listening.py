@@ -25,6 +25,7 @@ from ears import spec as ears_spec
 from ears import take as ears_take
 
 from ..app import call, tool
+from .references import loopback_busy
 
 ACTIVE = ("route", "prepare", "fire", "starting", "recording", "collect", "restore", "verifying", "aborting")
 MAX_WAIT = 600.0
@@ -258,6 +259,9 @@ def capture(set: str | None = None, variation: str | None = None, tempo: float |
         return _wait(job, wait, analyze)
     if not starting and job.get("id") and (_load_pending(job["id"]) or _last_result(job["id"])):
         return _wait(job, 0, analyze)   # the outcome of the capture an earlier call started
+    busy = loopback_busy()
+    if busy:
+        raise ToolError(busy)
     song = call("bounce_song_info")
     home = _home(song)
     spec_obj = _spec(spec, home)
@@ -365,14 +369,32 @@ def _resolve(home, ref, against=None):
         raise ToolError(str(error))
 
 
-def _counts(item):
+# A check whose verdict depends on what else was stored when the take was analysed: audio.balance changes as
+# references are added, so its warns say nothing about the take itself.
+CONTEXT_CHECKS = ("audio.balance",)
+
+
+def _checks(item):
     path = item.path / "report.json"
-    if path.is_file():
-        try:
-            return json.loads(path.read_text()).get("counts")
-        except ValueError:
-            return None
-    return None
+    if not path.is_file():
+        return None
+    try:
+        checks = json.loads(path.read_text()).get("checks")
+    except ValueError:
+        return None
+    return dict(((check.get("check"), check.get("subject")), check.get("status")) for check in checks or [])
+
+
+def comparable_counts(first, second):
+    """Fail and warn counts of two takes over the checks both ran (neither skipped), leaving out CONTEXT_CHECKS,
+    so a check that one report could not run, or that depends on the stored references, cannot pass for a
+    regression. None when either report is missing."""
+    a, b = _checks(first), _checks(second)
+    if a is None or b is None:
+        return None
+    keys = [key for key in a if key in b and key[0] not in CONTEXT_CHECKS and "skip" not in (a[key], b[key])]
+    count = lambda checks: dict((status, sum(1 for key in keys if checks[key] == status)) for status in ("fail", "warn"))
+    return {"a": count(a), "b": count(b)}
 
 
 @tool(read_only=True)
@@ -381,8 +403,9 @@ def compare(a: str = "latest", b: str = "best", blind: bool = False, variation: 
     """Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
     a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
-    "refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
-    sections) or "ref:<name>[:<section>]" (one reference, default section "full").
+    "refs" (the top tier against the range of every stored reference's full sections), "refs:sparse" (tier T2
+    against their sparse sections), "refs:<kind>:<tier>" (any tier), or "ref:<name>[:<section>]" (one
+    reference, default section "full"). Against references, dynamics are information only.
     Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
     blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
     """
@@ -391,17 +414,21 @@ def compare(a: str = "latest", b: str = "best", blind: bool = False, variation: 
     first = _resolve(home, a)
     if str(b).strip() == "spec":
         return dict(ears_compare.compare_spec(first, spec_obj), a=first.id, b="spec")
-    if str(b).strip().startswith("refs"):
-        kind = str(b).strip().split(":", 1)[1] if ":" in str(b) else "full"
+    if str(b).strip() == "refs" or str(b).strip().startswith("refs:"):
+        parts = str(b).strip().split(":")
+        kind = parts[1] if len(parts) > 1 and parts[1] else "full"
+        tier = parts[2] if len(parts) > 2 and parts[2] else None
+        if kind not in ears_refs.KINDS:
+            raise ToolError("Unknown section kind {0!r}: use refs, refs:sparse, refs:track or refs:<kind>:<tier>".format(kind))
         stored = ears_refs.all_refs()
         if not stored:
             raise ToolError("No references stored yet: ref(action='measure', uri=...) or ref(action='add', file=...)")
         try:
-            result = ears_compare.compare_envelope(first, ears_refs.envelope(stored, kind), spec_obj, variation=variation)
+            result = ears_compare.compare_envelope(first, ears_refs.envelope(stored, kind), spec_obj, variation=variation, tier=tier)
         except ValueError as error:
             raise ToolError(str(error))
-        deltas = result["deltas"]
-        return dict(result, a=first.id, b=str(b), deltas=deltas[:14], more_deltas=max(0, len(deltas) - 14))
+        bands = result.pop("bands")
+        return dict(result, a=first.id, b=str(b), bands=bands[:10], more_bands=max(0, len(bands) - 10))
     if str(b).startswith("ref:"):
         _, _, rest = str(b).partition(":")
         name, _, section = rest.partition(":")
@@ -417,9 +444,8 @@ def compare(a: str = "latest", b: str = "best", blind: bool = False, variation: 
     second = _resolve(home, b, against=first)
     if first.id == second.id:
         raise ToolError("Both sides are take {0}".format(first.id))
-    counts_a, counts_b = _counts(first), _counts(second)
     result = ears_compare.compare_takes(first, second, spec_obj, home=home, variation=variation,
-                                        check_counts={"a": counts_a, "b": counts_b} if counts_a and counts_b else None)
+                                        check_counts=comparable_counts(first, second))
     if blind:
         packet = ears_compare.blind_packet(result, first.id, second.id)
         key_path = Path(home) / "blind" / "{0}.json".format(time.strftime("%Y%m%d-%H%M%S"))
@@ -451,10 +477,13 @@ def takes(action: str = "list", take: str | None = None, set: str | None = None,
     if action == "list":
         entries = ledger.query(home, set_name=set, tempo=tempo, variation=variation, limit=max(1, min(50, int(limit))))
         out = {"home": str(home), "takes": entries, "best": ledger.state(home)[1]}
-        behind = ears.left_behind(song.get("set_path"), song.get("set_name"))
+        behind = None
+        if song.get("set_path") and not entries:
+            names = call("lom_get", path="live_set", properties=["tracks"])["values"]["tracks"].get("items") or []
+            behind = ears.left_behind(song.get("set_path"), song.get("set_name"), names)
         if behind:
-            out["hint"] = ("Takes from before this set was first saved are in {0}; move that folder to {1} to keep "
-                           "using them (ledger, best takes, noise floors)".format(behind, home))
+            out["hint"] = ("Takes recorded before this set was first saved seem to be in {0} (their tracks match this "
+                           "set's); ask the user before moving that folder to {1}".format(behind, home))
         return out
     if not take:
         raise ToolError("action {0!r} needs take=<take id>".format(action))

@@ -30,7 +30,7 @@ def isolated(tmp_path, monkeypatch):
 def _fakes(monkeypatch, seconds=24.0):
     song = np.concatenate([np.zeros((int(0.6 * RATE), 2)), groove(124.0, seconds)])
     player = FakePlayer(duration=seconds + 0.6)
-    monkeypatch.setattr(references, "Spotify", lambda: player)
+    monkeypatch.setattr(references, "Spotify", lambda **kwargs: player)
     monkeypatch.setattr(references.ears_meter, "LoopbackInput", lambda: ears_meter.ArrayInput(song, RATE))
     return player
 
@@ -49,7 +49,7 @@ def test_measure_refuses_bad_input_and_a_playing_live(monkeypatch):
     with pytest.raises(ToolError, match="Not a Spotify track"):
         references.ref(action="measure", uri="spotify:album:7lcpCG4RBy3njzxHXlhOnp")
     for bad in ({"drop": [72]}, {"drop": [102, 72]}, {"drop": "1:12"}, []):
-        with pytest.raises(ToolError, match="section"):
+        with pytest.raises(ToolError, match="(?i)section"):
             references.ref(action="measure", uri=URI, sections=bad)
     monkeypatch.setattr(references, "_live_playing", lambda: True)
     with pytest.raises(ToolError, match="Live is playing"):
@@ -76,16 +76,61 @@ def test_a_failed_measurement_reports_its_error(monkeypatch):
     assert out["state"] == "failed" and "No signal" in out["error"]
 
 
-def test_setup_confirms_m6(monkeypatch):
+def test_setup_reports_m6_and_only_frederic_confirms_it(monkeypatch):
     _fakes(monkeypatch)
     first = references.ref(action="setup")
-    assert first["confirmed"] == {} and any("Normalize volume" in item for item in first["warnings"])
-    second = references.ref(action="setup", confirm=True)
-    assert second["confirmed"]["normalization_off"] and second["warnings"] == []
+    assert first["confirmed"] == {} and any("Ask Frederic" in item and "ears ref setup --confirm" in item for item in first["warnings"])
+    with pytest.raises(TypeError):
+        references.ref(action="setup", confirm=True)                     # the agent cannot confirm it for him
+    ears_refs.confirm_setup()                                             # what `ears ref setup --confirm` does
+    assert references.ref(action="setup")["warnings"] == []
+
+
+def test_the_loopback_is_guarded_while_a_reference_plays(monkeypatch):
+    from MCP_Server.tools import clips, song
+    references._JOB.update(id="ref-1", state="measuring", stop=__import__("threading").Event(), done=[], started=time.time())
+    for call in (lambda: references.ref(action="pause"), lambda: references.ref(action="play", uri=URI),
+                 lambda: references.meter(seconds=5), lambda: song.fire_scene(0), lambda: song.transport("play"),
+                 lambda: clips.fire_clip("kick", 0)):
+        with pytest.raises(ToolError, match="measur"):
+            call()
+    assert references.loopback_busy().startswith("A reference is being measured")
+    references._JOB["state"] = "finished"
+    assert references.loopback_busy() is None
+
+
+def test_meter_of_live_refuses_while_spotify_plays_and_drops_levels_when_unsure(monkeypatch):
+    _fakes(monkeypatch)
+    monkeypatch.setattr(references, "_live_playing", lambda: True)
+    monkeypatch.setattr(references, "_spotify_playing", lambda: True)
+    with pytest.raises(ToolError, match="Spotify is playing"):
+        references.meter(seconds=5, source="live")
+    monkeypatch.setattr(references, "_spotify_playing", lambda: None)
+    unsure = references.meter(seconds=5, source="live")
+    assert "lufs_i" not in unsure["profile"] and "Could not check whether Spotify" in unsure["warning"]
+
+
+def test_a_cancelled_job_says_cancelled_and_a_finished_one_finished(monkeypatch):
+    _fakes(monkeypatch, seconds=30.0)
+    real_record = ears_meter.ArrayInput.record
+
+    def slow(self, seconds, stop=None, progress=None, started=None):    # a real-time input: cancel lands mid-track
+        if seconds > 5:
+            for _ in range(100):
+                if stop is not None and stop.is_set():
+                    break
+                time.sleep(0.05)
+        return real_record(self, seconds, stop=stop, progress=progress, started=started)
+
+    monkeypatch.setattr(ears_meter.ArrayInput, "record", slow)
+    references.ref(action="measure", uri=URI, wait=0.3)
+    out = references.ref(action="cancel")
+    assert out["state"] == "cancelled" and "Cancelled" in out["error"] and out["done"] == []
+    assert ears_refs.all_refs() == []
 
 
 def test_meter_checks_its_arguments_and_live(monkeypatch):
-    for kwargs in ({"source": "radio"}, {"seconds": 0.1}, {"seconds": 500}):
+    for kwargs in ({"source": "radio"}, {"seconds": 1.0}, {"seconds": 500}):
         with pytest.raises(ToolError):
             references.meter(**kwargs)
     with pytest.raises(ToolError, match="Live is not playing"):
@@ -115,3 +160,23 @@ def test_delete_and_add(tmp_path):
         references.ref(action="delete", name="mine")
     with pytest.raises(ToolError):
         references.ref(action="add", file=str(tmp_path / "missing.wav"))
+
+
+def test_check_counts_leave_out_reference_dependent_and_skipped_checks(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from MCP_Server.tools import listening
+
+    def take(name, checks):
+        folder = tmp_path / name
+        folder.mkdir()
+        (folder / "report.json").write_text(json.dumps({"checks": [{"check": c, "subject": s, "status": st} for c, s, st in checks]}))
+        return SimpleNamespace(path=folder)
+
+    best = take("best", [("audio.loudness", "T5@A", "pass"), ("audio.balance", "T5@A", "skip"), ("audio.key", "mix", "warn"),
+                         ("audio.parts", "take", "skip")])
+    latest = take("latest", [("audio.loudness", "T5@A", "pass"), ("audio.balance", "T5@A", "warn"), ("audio.key", "mix", "warn"),
+                             ("audio.parts", "take", "fail")])
+    assert listening.comparable_counts(latest, best) == {"a": {"fail": 0, "warn": 1}, "b": {"fail": 0, "warn": 1}}
+    assert listening.comparable_counts(latest, take("empty", [])) == {"a": {"fail": 0, "warn": 0}, "b": {"fail": 0, "warn": 0}}
+    assert listening.comparable_counts(latest, SimpleNamespace(path=tmp_path / "missing")) is None

@@ -9,6 +9,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from .. import theory
 from ..app import call, tool
+from .references import loopback_busy
 
 CONVERSION_WAIT = 30.0  # seconds clip_action waits for Live's audio-to-MIDI conversion
 
@@ -102,6 +103,9 @@ def fire_clip(track: int | str, slot: int) -> dict:
 
     Check the result with get_clip (state) or get_meters; stop with stop_clip or transport.
     """
+    busy = loopback_busy()
+    if busy:
+        raise ToolError(busy)
     return call("fire_clip", track=track, slot=slot)
 
 

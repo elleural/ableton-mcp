@@ -11,6 +11,7 @@ import time as _time
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..app import call, tool
+from .references import loopback_busy
 
 PENDING_ATTEMPTS = 20
 PENDING_DELAY = 0.03
@@ -115,6 +116,10 @@ def transport(action: str, position: float | str | None = None) -> dict:
     marker. Returns the action plus the transport state read on Live's next tick.
     Example: transport("play", position="17.1.1").
     """
+    if str(action).strip().lower() in ("play", "continue", "play_selection"):
+        busy = loopback_busy()
+        if busy:
+            raise ToolError(busy)
     result = until_done(lambda **extra: call("transport", action=action, position=position, **extra))
     try:
         result["transport"] = call("get_status")["transport"]
@@ -163,6 +168,9 @@ def fire_scene(scene: int | str, force_legato: bool = False) -> dict:
     tempo or time signature applies. Starts the transport. force_legato launches clips immediately in
     legato. Audition with get_meters; stop with transport("stop_all_clips") or transport("stop").
     """
+    busy = loopback_busy()
+    if busy:
+        raise ToolError(busy)
     return call("fire_scene", scene=scene, force_legato=force_legato)
 
 

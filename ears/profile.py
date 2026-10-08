@@ -32,25 +32,25 @@ def profile(audio, a4_hz=440.0, crossover_hz=120.0, absolute=True):
     integrated loudness; crest_db: sample peak minus RMS; dynamics_spread: 90th minus 10th percentile of the
     short-term loudness (LU, gated 20 LU below the mix); width, correlation: stereo image; mono_sub_loss_db:
     what the mono sum loses below the crossover; onset_rate: onsets per second; tempo and key: estimates.
-    A silent input gives {"seconds", "silent": True}.
+    A silent input, or one whose loudness the BS.1770 gate cannot measure (too quiet, or shorter than one 400 ms
+    block), gives {"seconds", "silent": True}: no relative figure is meaningful without a loudness to relate to.
     """
     out = {"seconds": _round(audio.duration)}
     levels = measure.levels(audio)
-    if levels["silent"]:
+    values = loudness.measure(audio, series=True) if not levels["silent"] else None
+    lufs = values["integrated"] if values else loudness.SILENCE
+    if levels["silent"] or lufs <= loudness.SILENCE + 1:
         out["silent"] = True
         return out
-    values = loudness.measure(audio, series=True)
-    lufs = values["integrated"]
-    # Onset, tempo and key detection have absolute floors, so the shape is measured at one loudness whatever
-    # level the audio arrived at (a streamed reference's level is the player's choice).
     absolute_figures = (lufs, values["true_peak"], levels["peak_dbfs"], levels["rms_dbfs"])
-    if lufs > loudness.SILENCE + 1:
-        audio = Audio(audio.samples * 10.0 ** ((MEASURE_LUFS - lufs) / 20.0), audio.rate)
+    bands = measure.band_levels(audio)          # re the audio's own loudness, as compare.side_metrics measures a take
+    out["bands"] = dict((name, _round(item["db"] - lufs, 1)) for name, item in bands["bands"].items())
+    # Onset, tempo and key detection have absolute floors, so the rest of the shape is measured at one loudness
+    # whatever level the audio arrived at (a streamed reference's level is the player's choice).
+    audio = Audio(audio.samples * 10.0 ** ((MEASURE_LUFS - lufs) / 20.0), audio.rate)
     third = measure.third_octave_levels(audio)
     out["third_octave"] = dict(("{0:g}".format(center), _round(value, 1))
                                for center, value in zip(third["centers"], third["relative_db"]) if value > BAND_FLOOR_DB)
-    bands = measure.band_levels(audio)
-    out["bands"] = dict((name, _round(item["db"] - lufs, 1)) for name, item in bands["bands"].items())
     out["lra"] = _round(values["range"], 1)
     out["plr_db"] = _round(values["true_peak"] - lufs, 1)
     out["crest_db"] = _round(levels["crest_db"], 1)

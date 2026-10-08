@@ -126,4 +126,4 @@ score gates anything: masking, analyser bands and phone survival are report-leve
 | M3: one chain | the same test plays a NOVA-like T5 through Live and the loopback and compares with offline | loudness ±0.1 LU, true peak ±0.2 dB, bands ±0.2 dB, every shape metric unchanged |
 | M4: no absolute level for external | profile keys of an external result; a 14 dB quieter copy measures the same | no loudness, peak or RMS kept; shape within 0.15 |
 | M5: each section plays once | a second `measure` of the same track or section | answered from `refs/<name>.json` with no playback |
-| M6: Spotify volume 100, normalisation and crossfade off, alerts elsewhere | `ref(action="setup")`; normalisation and crossfade cannot be read from Spotify's files any more | waits for Frederic's confirmation |
+| M6: Spotify volume 100, normalisation and crossfade off, alerts elsewhere | `ref(action="setup")` reports what is left; normalisation and crossfade cannot be read from Spotify's files any more | waits for Frederic: `uv run ears ref setup --confirm` |

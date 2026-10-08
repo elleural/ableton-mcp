@@ -57,6 +57,13 @@ class Spotify(object):
             raise PlayerError("Spotify: {0}".format(message or "osascript failed"))
         return done.stdout.strip()
 
+    def running(self):
+        """True when the Spotify app is open, checked without starting it (unknown counts as open)."""
+        try:
+            return subprocess.run(["pgrep", "-x", "Spotify"], capture_output=True, timeout=5).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return True
+
     def _tell(self, body):
         return self._run('tell application "Spotify"\n{0}\nend tell'.format(body))
 
@@ -99,6 +106,11 @@ class Spotify(object):
 
     def pause(self):
         self._tell("pause")
+        return self.status()
+
+    def resume(self):
+        """Continue the current track from where it is paused."""
+        self._tell("play")
         return self.status()
 
     def seek(self, position):

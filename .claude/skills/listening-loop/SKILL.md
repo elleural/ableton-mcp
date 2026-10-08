@@ -28,7 +28,8 @@ audio and differences between takes (docs/listening-loop-prd.md section 12). The
    `compare("latest", "refs")` places the top tier's band balance, dynamics (loudness range, peak to
    loudness, short-term spread), stereo width and onset density inside, above or below the range the
    references span; `audio.balance` warns outside it. It is a direction, not a target: a game stem sum at
-   -14 LUFS is meant to be less dense than a club master. `ref(action="list")` shows the references; a new
+   -14 LUFS is meant to be less dense than a club master, so dynamics come back as information.
+   `compare("latest", "refs:sparse")` puts tier T2 against the references' sparse sections. `ref(action="list")` shows the references; a new
    one is `ref(action="measure", uri=<Spotify track>)`, which plays it in the Spotify app for as long as the
    track lasts (stop Live first; call `ref()` to keep waiting).
 7. **Claim only what the evidence supports.** Passing every check does not mean it sounds good. A

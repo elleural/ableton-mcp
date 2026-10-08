@@ -54,8 +54,15 @@ def ref_name(text):
     return safe_name(base.lower().replace("’", "").replace("'", ""), fallback="reference")
 
 
+RESERVED = ("track", "full", "sparse")     # section names the whole-track measurement fills in
+
+
+def _key(name):
+    return safe_name(str(name or "").strip().lower(), fallback="reference")
+
+
 def _path(name, where=None):
-    return folder(where) / "{0}.json".format(safe_name(name))
+    return folder(where) / "{0}.json".format(_key(name))
 
 
 def _numbers_only(value, where="ref"):
@@ -72,9 +79,30 @@ def _numbers_only(value, where="ref"):
             _numbers_only(item, "{0}[{1}]".format(where, index))
 
 
+def identity(ref):
+    """What a reference describes: ("external", track uri) or ("file", resolved path)."""
+    return ("external", ref.get("uri")) if ref.get("uri") else ("file", ref.get("file"))
+
+
+def conflict(ref, wanted):
+    """A sentence when the stored reference describes something other than `wanted` (an identity), else None."""
+    if ref and wanted and identity(ref) != tuple(wanted):
+        return "Reference {0} is {1} ({2})".format(ref.get("name"), ref.get("title") or "something else",
+                                                   ref.get("uri") or ref.get("file"))
+    return None
+
+
 def save(ref, where=None):
+    """Write a reference; refuses to overwrite one that describes another track or file."""
     _numbers_only(ref)
     path = _path(ref["name"], where)
+    if path.is_file():
+        try:
+            message = conflict(json.loads(path.read_text()), identity(ref))
+        except ValueError:
+            message = None
+        if message:
+            raise RefError(message + "; choose another name or delete it first")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(ref, indent=1, sort_keys=True))
@@ -106,16 +134,58 @@ def all_refs(where=None):
     return out
 
 
-def find(uri=None, name=None, where=None):
+def find(uri=None, name=None, where=None, file=None):
+    """The stored reference for a name, a track uri or a file. A name taken by something else is an error."""
+    wanted = ("external", uri) if uri else ("file", file) if file else None
     if name:
-        found = load(ref_name(name), where) or load(name, where)
-        if found:
+        found = load(name, where)
+        message = conflict(found, wanted)
+        if message:
+            raise RefError(message + "; choose another name or delete it")
+        if found or not wanted:
             return found
-    if uri:
+    if wanted:
         for item in all_refs(where):
-            if item.get("uri") == uri:
+            if identity(item) == wanted:
                 return item
     return None
+
+
+def unique_name(base, wanted, where=None):
+    """`base`, or base-<short id> when `base` already names another track or file."""
+    name = _key(base)
+    if not conflict(load(name, where), wanted):
+        return name
+    tail = str(wanted[1] or "").split(":")[-1].split("/")[-1]
+    tail = re.sub(r"[^a-z0-9]", "", tail.lower())[-6:] or "2"
+    candidate, number = "{0}-{1}".format(name, tail), 2
+    while conflict(load(candidate, where), wanted):
+        candidate, number = "{0}-{1}-{2}".format(name, tail, number), number + 1
+    return candidate
+
+
+def check_sections(sections):
+    """{name: [start, end]} in seconds, checked before anything plays: names other than track/full/sparse,
+    spans of at least meter.MIN_SECONDS."""
+    if sections is None:
+        return None
+    if not isinstance(sections, dict):
+        raise RefError("sections must map names to [start, end] in seconds, such as {\"drop\": [72, 102]}")
+    if not sections:
+        return None
+    out = {}
+    for name, span in sections.items():
+        key = str(name).strip()
+        if not key or key in RESERVED:
+            raise RefError("Section name {0!r} is taken by the whole-track measurement ({1})".format(key, ", ".join(RESERVED)))
+        try:
+            start, end = (float(value) for value in span)
+        except (TypeError, ValueError):
+            raise RefError("Section {0!r} must be [start, end] in seconds".format(key))
+        if start < 0.0 or end - start < meter.MIN_SECONDS:
+            raise RefError("Section {0!r} must start at 0 or later and last at least {1:g} s".format(key, meter.MIN_SECONDS))
+        out[key] = [start, end]
+    return out
 
 
 def delete(name, where=None):
@@ -142,17 +212,25 @@ def summary(ref):
 # ---------------------------------------------------------------------------
 
 def add_file(path, name=None, sections=None, where=None, a4_hz=440.0, crossover_hz=120.0):
-    """Measure a file Frederic owns (lossless preferred) and store its reference."""
+    """Measure a file Frederic owns (lossless preferred) and store its reference (named sections stored before are
+    measured again from the file)."""
+    sections = check_sections(sections)
+    resolved = str(Path(path).expanduser().resolve())
+    wanted = ("file", resolved)
+    existing = find(name=name, file=resolved, where=where)
     try:
-        audio = read(path)
+        audio = read(resolved)
     except Exception as error:
         raise RefError("Cannot read {0}: {1}".format(path, error))
     if audio.channels == 1:
         audio = Audio(np.repeat(audio.samples, 2, axis=1), audio.rate)
-    measured = meter.measure_sections(Audio(audio.samples[:, :2], audio.rate), "file", sections, a4_hz, crossover_hz)
-    ref = {"name": safe_name(name or ref_name(Path(path).stem)), "source": "file", "file": str(Path(path).resolve()),
-           "title": Path(path).stem, "seconds": round(audio.duration, 2), "rate": audio.rate,
-           "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    named = dict((key, value["span"][0]) for key, value in ((existing or {}).get("sections") or {}).items()
+                 if key not in RESERVED and value.get("span"))
+    named.update(sections or {})
+    measured = meter.measure_sections(Audio(audio.samples[:, :2], audio.rate), "file", named, a4_hz, crossover_hz)
+    ref = {"name": existing["name"] if existing else (_key(name) if name else unique_name(ref_name(Path(resolved).stem), wanted, where)),
+           "source": "file", "file": resolved, "title": Path(resolved).stem, "seconds": round(audio.duration, 2),
+           "rate": audio.rate, "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     ref.update(measured)
     del audio
     save(ref, where)
@@ -201,8 +279,8 @@ def setup_warnings(status, chain, where=None, alerts=None):
     if status and status.get("volume") is not None and status["volume"] < 100:
         warnings.append("Spotify's volume is {0:g}; set it to 100 (the level is not used, but low volume costs resolution)".format(status["volume"]))
     if not state.get("normalization_off"):
-        warnings.append("Confirm once that Spotify > Settings > Playback has 'Normalize volume' and 'Crossfade songs' off "
-                        "(the ref tool's setup action with confirm, or `ears ref setup --confirm`)")
+        warnings.append("Ask Frederic to check that Spotify > Settings > Playback has 'Normalize volume' and 'Crossfade "
+                        "songs' off; he confirms it once with `uv run ears ref setup --confirm`")
     alerts = alert_device() if alerts is None else alerts
     if alerts and chain and alerts.split()[0].lower() in str(chain.get("device", "")).lower():
         warnings.append("macOS alert sounds play through {0}, which the meter reads; set System Settings > Sound > "
@@ -210,15 +288,30 @@ def setup_warnings(status, chain, where=None, alerts=None):
     return warnings
 
 
-def _record_track(player, source, uri, start, seconds, stop=None, progress=None):
-    """Play `uri` from `start` and record `seconds` of it into memory; stop early if the player moves on."""
-    state = {"checked": 0.0, "moved_on": False}
+class Cancelled(RefError):
+    """The measurement was cancelled."""
+
+
+LEAD_SECONDS = 2.0     # extra recording time that covers the player's start-up delay (trimmed afterwards)
+
+
+def _record_span(player, source, uri, seconds, stop=None, progress=None, guard=None):
+    """Resume the paused player and record `seconds` of `uri` into memory, as Audio trimmed to its start.
+
+    Stops early, measuring nothing, when the player leaves the track, when `guard()` returns a reason (Live started
+    playing into the same loopback) or when `stop` is set. Returns (audio, complete, dropouts)."""
+    state = {"checked": 0.0, "moved_on": False, "guard": None}
 
     def watch(read):
-        if progress is not None and progress(read, seconds) is False:
+        if progress is not None and progress(min(read, seconds), seconds) is False:
             return False
         if read - state["checked"] >= 1.0:
             state["checked"] = read
+            if guard is not None:
+                reason = guard()
+                if reason:
+                    state["guard"] = reason
+                    return False
             try:
                 status = player.status()
             except PlayerError:
@@ -229,30 +322,50 @@ def _record_track(player, source, uri, start, seconds, stop=None, progress=None)
                 return False
         return True
 
-    def begin():
-        player.play(uri, position=start or None)
-
-    recording = source.record(seconds, stop=stop, progress=watch, started=begin)
     try:
-        player.pause()
-    except PlayerError:
-        pass
-    return recording, state["moved_on"]
+        recording = source.record(seconds + LEAD_SECONDS, stop=stop, progress=watch, started=player.resume)
+    finally:
+        try:
+            player.pause()
+        except PlayerError:
+            pass
+    if stop is not None and stop.is_set():
+        raise Cancelled("Cancelled; nothing was stored for this span")
+    if state["guard"]:
+        raise RefError(state["guard"] + "; nothing was stored for this span")
+    samples, rate, dropouts = recording.samples, recording.rate, recording.dropouts
+    del recording
+    begin = meter.signal_start(samples)
+    if begin is None:
+        raise RefError("No signal on {0} while Spotify played: is Spotify's output the device the meter reads?".format(
+            source.describe()["device"]))
+    audio = Audio(samples[begin:begin + int(round(seconds * rate))], rate)
+    del samples
+    complete = audio.duration >= seconds - 0.5
+    return audio, complete, dropouts
 
 
 def measure_stream(uri, player, source, name=None, sections=None, where=None, refresh=False, stop=None, progress=None,
-                   a4_hz=440.0, crossover_hz=120.0, alerts=None):
-    """Measure a streamed track once and store its reference (cached per section: M5).
+                   guard=None, a4_hz=440.0, crossover_hz=120.0, alerts=None):
+    """Measure a streamed track once and store its reference, cached per section (M5).
 
-    sections None plays the whole track and finds its full and sparse parts; {name: [start, end]} plays only
-    those spans. The samples stay in memory and are dropped after measuring (M1); only the level-independent
-    profile is kept (M4).
+    sections None measures the whole track ("track", "full", "sparse", plus any named section stored before, cut
+    from the same recording); {name: [start, end]} measures only the named spans not stored yet (refresh=True:
+    measures them again). The samples stay in memory and are dropped after measuring (M1); only the
+    level-independent profile is kept (M4). A span that is cut short, cancelled, or interrupted by `guard`
+    (Live playing into the loopback) stores nothing; spans measured before it stay stored.
     """
     uri = track_uri(uri)
-    cached = find(uri=uri, name=name, where=where)
-    wanted = set(sections or {}) or {"track"}
-    if cached and not refresh and wanted <= set(cached.get("sections") or {}):
-        return dict(cached, cached=True)
+    sections = check_sections(sections)
+    wanted = ("external", uri)
+    existing = find(uri=uri, name=name, where=where)
+    have = set((existing or {}).get("sections") or {})
+    if sections:
+        todo = dict((key, span) for key, span in sections.items() if refresh or key not in have)
+        if not todo:
+            return dict(existing, cached=True)
+    elif existing and "track" in have and not refresh:
+        return dict(existing, cached=True)
     status = player.status()
     if status.get("state") == "playing":
         player.pause()
@@ -260,68 +373,55 @@ def measure_stream(uri, player, source, name=None, sections=None, where=None, re
     meter.check_silent(source)
     chain = source.describe()
     warnings = setup_warnings(status, chain, where, alerts=alerts)
+    if name and existing and existing.get("name") != _key(name):
+        warnings.append("This track is already stored as {0!r}; measured into it (one reference per track, so the "
+                        "envelope does not count it twice)".format(existing["name"]))
+    track = (player.play(uri).get("track") or {})
+    player.pause()
+    duration = float(track.get("duration") or 0.0)
+    if sections:
+        for key, (start, end) in todo.items():
+            if duration and end > duration - TAIL_SECONDS:
+                raise RefError("Section {0!r} ends at {1:g} s, past the track's end ({2:.1f} s)".format(key, end, duration))
+    ref = dict(existing or {})
+    ref.update({"name": existing["name"] if existing else (_key(name) if name else unique_name(ref_name(track.get("name") or uri), wanted, where)),
+                "source": "external", "uri": uri, "title": track.get("name"), "artist": track.get("artist"),
+                "album": track.get("album"), "duration": duration or None, "chain": chain,
+                "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "warnings": warnings})
+    ref.setdefault("sections", {})
     started = time.time()
     if not sections:
-        info = player.play(uri)
-        player.pause()
-        track = info["track"]
+        seconds = max(meter.MIN_SECONDS, duration - TAIL_SECONDS)
         player.seek(0.0)
-        seconds = max(1.0, float(track["duration"]) - TAIL_SECONDS)
-        recording, moved_on = _record_track(player, source, uri, 0.0, seconds, stop, progress)
-        if stop is not None and stop.is_set():
-            raise RefError("Cancelled")
-        samples, rate = recording.samples, recording.rate
-        dropouts = recording.dropouts
-        del recording
-        begin = meter.signal_start(samples)
-        if begin is None:
-            raise RefError("No signal on {0} while Spotify played: is Spotify's output the device the meter reads "
-                           "({1})?".format(chain["device"], chain))
-        audio = Audio(samples[begin:], rate)
-        del samples
-        if moved_on and audio.duration < 0.9 * seconds:
-            warnings.append("Spotify stopped or moved on after {0:.0f} s of {1:.0f} s".format(audio.duration, seconds))
-        measured = meter.measure_sections(audio, "external", None, a4_hz, crossover_hz)
-        length = round(audio.duration, 2)
-        del audio
-    else:
-        track = player.status().get("track") or {}
-        measured = {"windows": [], "sections": {}}
-        dropouts, length = 0, 0.0
-        for section, (start, end) in sections.items():
-            seconds = float(end) - float(start)
-            if seconds <= 0.5:
-                raise RefError("Section {0} is shorter than half a second".format(section))
-            recording, _ = _record_track(player, source, uri, float(start), seconds, stop, progress)
-            if stop is not None and stop.is_set():
-                raise RefError("Cancelled")
-            samples, rate = recording.samples, recording.rate
-            dropouts += recording.dropouts
-            del recording
-            begin = meter.signal_start(samples)
-            if begin is None:
-                raise RefError("No signal on {0} while Spotify played section {1}".format(chain["device"], section))
-            audio = Audio(samples[begin:], rate)
-            del samples
-            part = meter.measure_sections(audio, "external", None, a4_hz, crossover_hz)["sections"]["track"]
-            part["span"] = [[float(start), float(end)]]
-            measured["sections"][str(section)] = part
-            length += audio.duration
-            del audio
-        track = player.status().get("track") or track
-    ref = dict(cached or {}) if not refresh else {}
-    ref.update({"name": safe_name(name) if name else (cached or {}).get("name") or ref_name(track.get("name") or uri),
-                "source": "external", "uri": uri, "title": track.get("name"), "artist": track.get("artist"),
-                "album": track.get("album"), "duration": track.get("duration"), "chain": chain,
-                "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "elapsed": round(time.time() - started, 1),
-                "dropouts": dropouts, "warnings": warnings})
-    if not sections:
-        ref["seconds"] = length
+        audio, complete, dropouts = _record_span(player, source, uri, seconds, stop, progress, guard)
+        if not complete:
+            raise RefError("Spotify stopped or moved on after {0:.0f} s of {1:.0f} s; nothing was stored".format(audio.duration, seconds))
+        named = dict((key, value["span"][0]) for key, value in ref["sections"].items() if key not in RESERVED and value.get("span"))
+        measured = meter.measure_sections(audio, "external", named, a4_hz, crossover_hz)
+        ref["seconds"] = round(audio.duration, 2)
         ref["windows"] = measured["windows"]
         ref["sections"] = measured["sections"]
-    else:
-        ref.setdefault("sections", {}).update(measured["sections"])
-    save(ref, where)
+        ref["dropouts"] = dropouts
+        if dropouts:
+            ref["warnings"] = warnings + ["{0} input overflow(s) during the measurement".format(dropouts)]
+        del audio
+        ref["elapsed"] = round(time.time() - started, 1)
+        save(ref, where)
+        return ref
+    for key, (start, end) in todo.items():
+        player.seek(start)
+        audio, complete, dropouts = _record_span(player, source, uri, end - start, stop, progress, guard)
+        if not complete:
+            raise RefError("Section {0!r} was cut short ({1:.1f} of {2:.1f} s: the player stopped or moved on); "
+                           "nothing was stored for it".format(key, audio.duration, end - start))
+        part = meter.measure_sections(audio, "external", None, a4_hz, crossover_hz)["sections"]["track"]
+        part["span"] = [[start, end]]
+        if dropouts:
+            part["dropouts"] = dropouts
+        ref["sections"][key] = part
+        del audio
+        ref["elapsed"] = round(time.time() - started, 1)
+        save(ref, where)                 # each span is kept as soon as it is measured
     return ref
 
 

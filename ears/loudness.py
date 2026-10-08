@@ -46,7 +46,8 @@ def k_weighting(rate):
 
 
 def _stereo(samples):
-    samples = np.asarray(samples, dtype=np.float64)
+    # One NaN or infinity (a damaged float file) would otherwise poison every sum: treat it as silence.
+    samples = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     if samples.ndim == 1:
         samples = samples[:, None]
     if samples.shape[1] == 1:
@@ -130,7 +131,7 @@ def loudness_range(samples, rate, weighted=None):
 
 def true_peak(samples, rate):
     """True peak in dBTP: the highest absolute value after oversampling (BS.1770-4 Annex 2)."""
-    samples = np.asarray(samples, dtype=np.float64)
+    samples = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     if samples.ndim == 1:
         samples = samples[:, None]
     if not samples.size:
@@ -147,7 +148,7 @@ def true_peak(samples, rate):
 
 
 def sample_peak(samples):
-    samples = np.asarray(samples, dtype=np.float64)
+    samples = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     value = float(np.max(np.abs(samples))) if samples.size else 0.0
     return 20.0 * math.log10(value) if value > 0 else SILENCE
 

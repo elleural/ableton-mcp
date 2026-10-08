@@ -38,7 +38,8 @@ pointed at (album tracks 2, 3, 8, 12):
   call timed out. Once allowed (System Settings > Privacy & Security > Automation > claude > Spotify):
   `ref(action="measure", uri=[the four ids above])`, about 18 minutes of playback with Live stopped.
 - **M6 is Frederic's:** Spotify > Settings > Playback: Normalize volume off, Crossfade songs off; volume 100; System
-  Settings > Sound > "Play sound effects through" not the Scarlett; then `ref(action="setup", confirm=True)`.
+  Settings > Sound > "Play sound effects through" not the Scarlett; then he runs `uv run ears ref setup --confirm` (the
+  tool cannot confirm it for him).
 - The NOVA set was crash-recovered and still unsaved: it carries the e2e test's leftovers (three
   `[test:e2e_release]` tracks, return C, two scenes) and 21 tracks re-armed by the recovery. Clean them up only
   after Frederic saves, deleting one object per call.

@@ -19,6 +19,7 @@ from ..app import call, tool
 MAX_WAIT = 600.0
 MAX_METER_SECONDS = 120.0
 _LOCK = threading.Lock()
+_METER = threading.Lock()
 _JOB = {}
 
 
@@ -27,6 +28,31 @@ def _live_playing():
         return bool(call("get_status").get("transport", {}).get("playing"))
     except ToolError:
         return False          # Live not running: nothing of it can reach the loopback
+
+
+def _guard():
+    """Checked every second while a reference plays: Live must stay silent, or it is measured too."""
+    return "Live started playing during the measurement" if _live_playing() else None
+
+
+def loopback_busy():
+    """Why Live must not play now (a reference is being measured through the loopback), or None. Tools that start
+    playback (capture, bounce, fire_scene, fire_clip, transport) refuse while this is set."""
+    if _JOB.get("state") == "measuring":
+        return ("A reference is being measured through the loopback ({0}); Live must stay silent until it ends: "
+                "call ref() to wait or ref(action='cancel')".format(_JOB["id"]))
+    return None
+
+
+def _spotify_playing():
+    """True or False when Spotify's state is known, None when it cannot be read (not permitted, not answering)."""
+    player = Spotify(timeout=3.0)
+    if not player.running():
+        return False
+    try:
+        return player.status().get("state") == "playing"
+    except PlayerError:
+        return None
 
 
 def _job_view(job):
@@ -53,9 +79,11 @@ def _run(job, uris, names, sections, refresh):
 
             name = names[index] if names and index < len(names) else None
             ref = ears_refs.measure_stream(uri, player, source, name=name, sections=sections, refresh=refresh,
-                                           stop=job["stop"], progress=progress)
+                                           stop=job["stop"], progress=progress, guard=_guard)
             job["done"].append(dict(ears_refs.summary(ref), cached=bool(ref.get("cached")), warnings=ref.get("warnings") or []))
-        job["state"] = "cancelled" if job["stop"].is_set() else "finished"
+        job["state"] = "cancelled" if len(job["done"]) < len(uris) else "finished"
+    except ears_refs.Cancelled as error:
+        job["state"], job["error"] = "cancelled", str(error)
     except (ears_refs.RefError, ears_meter.MeterError, PlayerError) as error:
         job["state"], job["error"] = "failed", str(error)
     except Exception as error:   # keep the server alive; the agent sees the message
@@ -71,26 +99,18 @@ def _wait(job, wait):
 
 def _sections(sections):
     """{name: [start_s, end_s]} checked before any playback starts."""
-    if sections is None:
-        return None
-    if not isinstance(sections, dict) or not sections:
-        raise ToolError("sections must be an object such as {\"drop\": [72, 102]} (seconds)")
-    out = {}
-    for name, span in sections.items():
-        try:
-            start, end = (float(value) for value in span)
-        except (TypeError, ValueError):
-            raise ToolError("section {0!r} must be [start, end] in seconds".format(name))
-        if not 0.0 <= start < end:
-            raise ToolError("section {0!r} must start at 0 or later and end after it starts".format(name))
-        out[str(name)] = [start, end]
-    return out
+    try:
+        return ears_refs.check_sections(sections)
+    except ears_refs.RefError as error:
+        raise ToolError(str(error))
 
 
 def _start(uris, names, sections, refresh, wait):
     with _LOCK:
         if _JOB.get("state") == "measuring":
             raise ToolError("A measurement is running ({0}); call ref() to wait or ref(action='cancel')".format(_JOB["id"]))
+        if _METER.locked():
+            raise ToolError("A meter call is reading the loopback; wait for it")
         if _live_playing():
             raise ToolError("Live is playing, and the loopback would measure it too: stop Live first (transport stop)")
         job = {"id": "ref-{0}".format(int(time.time() * 1000)), "state": "measuring", "done": [], "started": time.time(),
@@ -104,8 +124,7 @@ def _start(uris, names, sections, refresh, wait):
 
 @tool(destructive=True)
 def ref(action: str = "status", name: str | None = None, uri: str | list[str] | None = None, file: str | None = None,
-        sections: dict | None = None, refresh: bool = False, position: float | None = None, confirm: bool = False,
-        wait: float = 300.0) -> dict:
+        sections: dict | None = None, refresh: bool = False, position: float | None = None, wait: float = 300.0) -> dict:
     """References the soundtrack is compared against: measured once, kept as numbers, never as audio.
 
     action:
@@ -116,8 +135,8 @@ def ref(action: str = "status", name: str | None = None, uri: str | list[str] | 
     - "add": measure a file Frederic owns (file=path; sections optional).
     - "list": stored references, their sections (track, full, sparse) and the shared envelope.
     - "play" (uri, position s) / "pause": the Spotify app, for listening.
-    - "setup": what is left of the one-time setup; confirm=True records that Spotify's normalisation and
-      crossfade are off and macOS alerts play through another output.
+    - "setup": what is left of the one-time setup (Spotify's normalisation and crossfade off, volume 100,
+      macOS alerts through another output). Only Frederic confirms it: `uv run ears ref setup --confirm`.
     - "status" (default) / "cancel": the running measurement. "delete": remove reference `name`.
     Then compare(take, "refs") compares a take's top tier against all references.
     """
@@ -144,8 +163,9 @@ def ref(action: str = "status", name: str | None = None, uri: str | list[str] | 
     if action == "add":
         if not file:
             raise ToolError("add needs file (a path to audio Frederic owns)")
+        sections = _sections(sections)
         try:
-            return {"added": ears_refs.summary(ears_refs.add_file(file, name=name, sections=_sections(sections)))}
+            return {"added": ears_refs.summary(ears_refs.add_file(file, name=name, sections=sections))}
         except ears_refs.RefError as error:
             raise ToolError(str(error))
     if action == "list":
@@ -155,6 +175,8 @@ def ref(action: str = "status", name: str | None = None, uri: str | list[str] | 
                 "envelope": {"references": envelope["references"], "bands": len(envelope["third_octave"]),
                              "scalars": envelope["scalars"], "tempo": envelope["tempo"], "keys": envelope["keys"]} if envelope else None}
     if action in ("play", "pause"):
+        if _JOB.get("state") == "measuring":
+            raise ToolError("A reference is being measured; play and pause would cut it short (ref(action='cancel') first)")
         try:
             player = Spotify()
             if action == "pause":
@@ -165,7 +187,7 @@ def ref(action: str = "status", name: str | None = None, uri: str | list[str] | 
         except PlayerError as error:
             raise ToolError(str(error))
     if action == "setup":
-        state = ears_refs.confirm_setup() if confirm else ears_refs.setup_state()
+        state = ears_refs.setup_state()
         try:
             status = Spotify().status()
         except PlayerError as error:
@@ -198,16 +220,29 @@ def meter(seconds: float = 10.0, source: str = "live") -> dict:
     source = (source or "live").strip().lower()
     if source not in ("live", "external"):
         raise ToolError("source must be live or external")
-    if not 0.5 <= float(seconds) <= MAX_METER_SECONDS:
-        raise ToolError("seconds must be between 0.5 and {0:g}".format(MAX_METER_SECONDS))
-    if _JOB.get("state") == "measuring":
-        raise ToolError("A reference measurement is using the loopback; wait for it (ref()) or cancel it")
-    playing = _live_playing()
-    if source == "live" and not playing:
-        raise ToolError("Live is not playing: start playback first (fire_scene, or transport play)")
-    if source == "external" and playing:
-        raise ToolError("Live is playing, and the loopback would measure it too: stop Live first")
+    if not ears_meter.MIN_SECONDS <= float(seconds) <= MAX_METER_SECONDS:
+        raise ToolError("seconds must be between {0:g} and {1:g}".format(ears_meter.MIN_SECONDS, MAX_METER_SECONDS))
+    if not _METER.acquire(blocking=False):
+        raise ToolError("Another meter call is reading the loopback; wait for it")
     try:
-        return ears_meter.meter(ears_meter.LoopbackInput(), float(seconds), kind=source)
-    except ears_meter.MeterError as error:
-        raise ToolError(str(error))
+        busy = loopback_busy()
+        if busy:
+            raise ToolError(busy)
+        playing = _live_playing()
+        if source == "live" and not playing:
+            raise ToolError("Live is not playing: start playback first (fire_scene, or transport play)")
+        if source == "external" and playing:
+            raise ToolError("Live is playing, and the loopback would measure it too: stop Live first")
+        spotify = _spotify_playing() if source == "live" else False
+        if spotify:
+            raise ToolError("Spotify is playing, and the loopback would measure it with Live: pause it first (ref(action='pause'))")
+        try:
+            result = ears_meter.meter(ears_meter.LoopbackInput(), float(seconds), kind=source if spotify is False else "external")
+        except ears_meter.MeterError as error:
+            raise ToolError(str(error))
+        if spotify is None:
+            result["warning"] = ("Could not check whether Spotify is playing, so no absolute level is given (the loopback "
+                                 "might hold Spotify's audio too)")
+        return result
+    finally:
+        _METER.release()

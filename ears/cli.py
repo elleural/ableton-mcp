@@ -147,8 +147,12 @@ def cmd_compare(args):
         if not stored:
             print("No references stored in {0}".format(refs.folder(_refs_folder(args))), file=sys.stderr)
             return 2
-        kind = args.b.split(":", 1)[1] if ":" in args.b else "full"
-        _print(compare.compare_envelope(a, refs.envelope(stored, kind), spec), args.json)
+        parts = args.b.split(":")
+        kind = parts[1] if len(parts) > 1 and parts[1] else "full"
+        if kind not in refs.KINDS:
+            print("Unknown section kind {0}".format(kind), file=sys.stderr)
+            return 2
+        _print(compare.compare_envelope(a, refs.envelope(stored, kind), spec, tier=parts[2] if len(parts) > 2 and parts[2] else None), args.json)
         return 0
     elif args.b.startswith("ref:"):
         name, _, section = args.b[4:].partition(":")
@@ -217,8 +221,8 @@ def cmd_spec(args):
 
 
 def _refs_folder(args):
-    """References follow --home when it is given, else $EARS_REFS / $EARS_HOME / the shared store."""
-    return Path(args.home).expanduser() / "refs" if getattr(args, "home", None) else None
+    """--refs when given, else the store the MCP tools use ($EARS_REFS, else <$EARS_HOME>/refs, else the shared one)."""
+    return Path(args.refs).expanduser() if getattr(args, "refs", None) else None
 
 
 def _sections(values):
@@ -256,6 +260,8 @@ def cmd_ref(args):
             refs.delete(name, where)
         return 0
     if args.action == "add":
+        if args.name and len(args.items) > 1:
+            raise ValueError("--name names one reference; give one file with it")
         for path in args.items:
             _print(refs.summary(refs.add_file(path, name=args.name, sections=_sections(args.section), where=where)), args.json)
         return 0
@@ -286,6 +292,7 @@ def build_parser():
     parser.add_argument("--version", action="version", version="ears " + __version__)
     parser.add_argument("--home", help="ears home (takes, refs, calibration, ledger); default $EARS_HOME or .")
     parser.add_argument("--spec", help="spec file or bundled name (default nova)")
+    parser.add_argument("--refs", help="reference store (default: the one the MCP tools use)")
     parser.add_argument("--json", action="store_true", help="JSON output")
     sub = parser.add_subparsers(dest="command", required=True)
     item = sub.add_parser("analyze", help="measurement ear on a take")

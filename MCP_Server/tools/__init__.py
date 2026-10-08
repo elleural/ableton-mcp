@@ -12,5 +12,6 @@ from . import (  # noqa: F401
     browser,      # WS-D: browser search and loading
     export,       # WS-E: bounce, analysis, release
     listening,    # listening loop: capture, analyze_notes, compare, takes (docs/listening-loop-prd.md)
+    references,   # listening loop: ref, meter (references measured through the loopback)
     lom,          # lead: generic object-model access
 )

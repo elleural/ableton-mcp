@@ -3,10 +3,12 @@
 Implements [listening-loop-prd.md](listening-loop-prd.md) (the PRD) in this repository. Status and
 verified Live behaviour go to [spikes.md](spikes.md) and `docs/handoff/`.
 
-**Status (2026-10-07): phases 0, 1, 2 and the agent protocol are built and verified** on Live 12.4.6 with
-the NOVA set; calibration in [listening-loop-calibration.md](listening-loop-calibration.md), state and
-next steps in [handoff/2026-10-07-listening-loop.md](handoff/2026-10-07-listening-loop.md). Phases 3
-(listeners) and 4 (references, meter) wait for the answers to PRD §15.
+**Status (2026-10-08): phases 0, 1, 2, 4 and the agent protocol are built and verified** on Live 12.4.6 with
+the NOVA set; calibration in [listening-loop-calibration.md](listening-loop-calibration.md), state and next
+steps in [handoff/2026-10-07-listening-loop.md](handoff/2026-10-07-listening-loop.md) and
+[handoff/2026-10-08-listening-loop-references.md](handoff/2026-10-08-listening-loop-references.md). Phase 3
+(listeners) waits for the answers to PRD §15 q3-q4. Phase 4 (§8 below) has its references from Frederic:
+the *Nine Inch Noize* album (Nine Inch Nails × Boys Noize), streamed.
 
 ## 1. Inventory (PRD §2, first action)
 
@@ -130,3 +132,20 @@ Lead (main loop): spec and report contracts, measurement core, capture spike and
 review synthesis. Agent N (notes ear), I (images), M (spectral measurements): Sonnet. Agent R
 (snapshot/restore in the Remote Script): Opus. Review of the finished branch: Opus. Live work is
 serialised through the live-test lock (`.live-test.lock`).
+
+## 8. Phase 4: references and the meter (2026-10-08)
+
+Answers that unblocked it (PRD §15): the Scarlett is a **Solo 4th Gen** (Loopback on inputs 3-4); the references
+are four tracks of *Nine Inch Noize* (Vessel, She's Gone Away, Closer, As Alive As You Need Me To Be), streamed
+and played in the Spotify desktop app.
+
+| Topic | Decision | Why |
+| --- | --- | --- |
+| Tools | `ref(action=measure/add/list/play/pause/setup/status/cancel/delete)` and `meter(seconds, source)`; `compare(take, "refs")` and `"ref:<name>[:<section>]"` | `ref_add` and `ref_play` fold into `ref`, as the Phase 2 tools did; 84 of 90 tools |
+| Reading the loopback | PortAudio (`sounddevice`), inputs 3-4 by channel map, at the device's own rate, no device changes, no conversion | Bit-exact (spikes.md); Live keeps the device |
+| What is kept | `ears.profile`: third-octave balance re the mix, broad bands re loudness, loudness range, peak to loudness, crest, short-term spread, width, correlation, mono-sub loss, onset rate, tempo, key; absolute figures only for the agent's audio and owned files | M4. Shape is measured after normalising to −14 LUFS, because onset, tempo and key detection have absolute floors |
+| Sections | A whole track is metered once and cut into 10 s windows: "full" within 3 LU of the loudest, "sparse" 3-12 LU below, "quiet" below that; named spans on request | PRD 11.1 (top tier against full sections, lower tiers against sparse ones) without asking Frederic to time every drop |
+| Where references live | One store for every set: `$EARS_REFS`, else `<$EARS_HOME>/refs`, else `~/Music/AbletonMCP/Ears/refs` (PRD §4 put them in each ears home) | They describe outside music, take real time to measure (M5), and an untitled set's home moves on its first save |
+| Envelope | Per section kind, each band's range across references ±1 dB; scalars with their own margins (1 LU, 1 dB, 0.05 width, 15 % onset rate) | One reference must not give zero-width ranges |
+| Tempo | New `measure.tempo_estimate`: onset-flux autocorrelation with a comb (2 and 4 periods, halves and quarters) and a prior at 120 BPM | Exact on synthetic grooves 90-150 BPM; loop-built mixes often read at half tempo (the runner-up is reported, and comparisons fold octaves) |
+| No audio leaves memory | The meter has no file writer; an audit-hook test proves no write, network call or child process during an external measurement, and that a streamed reference writes only its JSON | M1, M2 |

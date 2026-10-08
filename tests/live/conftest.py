@@ -103,19 +103,21 @@ class Scratch(object):
     def cleanup(self):
         """Delete every track, return track and scene whose name starts with this scratch prefix.
 
-        One read and one batched delete (a single round trip to Live's main thread).
+        One read, then one deletion per round trip. A single batch (all deletions in one main-thread tick)
+        crashed Live 12.4.6 on a large set on 2026-10-07: FatalError std::out_of_range in
+        LSong::OnSceneTransactionCounterChanged after deleting tracks, a return and scenes in one tick.
         """
         collections = ("tracks", "return_tracks", "scenes")
         found = self.live.send_command("lom_get", {"path": "live_set", "properties": list(collections)})["values"]
-        commands = []
         for collection, method in zip(collections, ("delete_track", "delete_return_track", "delete_scene")):
             names = found[collection].get("items", [])
             for index in reversed(range(len(names))):
                 # Live prefixes return track names with their letter ("C-[test:x] verb").
                 if re.sub(r"^[A-Z]-", "", names[index]).startswith(self.prefix):
-                    commands.append({"type": "lom_call", "params": {"path": "live_set", "method": method, "args": [index]}})
-        if commands:
-            self.live.send_command("batch", {"commands": commands, "stop_on_error": False})
+                    try:
+                        self.live.send_command("lom_call", {"path": "live_set", "method": method, "args": [index]})
+                    except AbletonError:
+                        pass
 
 
 @pytest.fixture

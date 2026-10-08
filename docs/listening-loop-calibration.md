@@ -115,3 +115,15 @@ patterns match the brief per band.
 
 None is built or enabled (phase 3). Agreement with Frederic's blind picks has not been measured. No fuzzy
 score gates anything: masking, analyser bands and phone survival are report-level only.
+
+## 7. The meter (PRD §11.2)
+
+| Requirement | How it is checked | Result |
+| --- | --- | --- |
+| Calibration tone within ±0.1 dB | `tests/live/test_meter.py`: −24 dBFS 1 kHz from a soloed scratch track in Live, read through Loopback 3-4 | pass (peak and RMS within 0.1 dB) |
+| System path (Spotify's) | −30 dBFS 1 kHz played by `afplay` | −30.000 dBFS peak, −33.010 dBFS RMS, length exact |
+| M1, M2: no audio to disk or network | `tests/ears/test_references.py`, audit hook on every write, socket call and child process | none during an external measurement; a streamed reference writes only its JSON |
+| M3: one chain | the same test plays a NOVA-like T5 through Live and the loopback and compares with offline | loudness ±0.1 LU, true peak ±0.2 dB, bands ±0.2 dB, every shape metric unchanged |
+| M4: no absolute level for external | profile keys of an external result; a 14 dB quieter copy measures the same | no loudness, peak or RMS kept; shape within 0.15 |
+| M5: each section plays once | a second `measure` of the same track or section | answered from `refs/<name>.json` with no playback |
+| M6: Spotify volume 100, normalisation and crossfade off, alerts elsewhere | `ref(action="setup")`; normalisation and crossfade cannot be read from Spotify's files any more | waits for Frederic's confirmation |

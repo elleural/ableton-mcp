@@ -8,6 +8,10 @@
     ears ledger | ears keep <take>            history and the best pointer
     ears calibrate                            planted-defect run (PRD 13.2), Markdown table
     ears spec                                 what the spec defines: parts, tracks, bands, tiers
+    ears ref list | add <file> | measure <spotify uri...> | setup [--confirm] | delete <name>
+                                              references (PRD 11): numbers about outside music
+    ears meter [--seconds 10] [--source live|external]   measure what the Mac plays now, in memory
+    ears compare <take> refs | ref:<name>[:<section>]     a take against the references
 
 Exit status: 0 when nothing failed, 1 when a check failed, 2 on usage or input errors.
 `--home` (or EARS_HOME) is where takes live; `--spec` a path or bundled name (default: nova).
@@ -19,6 +23,9 @@ import sys
 from pathlib import Path
 
 from . import __version__, analyze, calibration, compare, ledger, notes, report, spec as specs, take as takes
+from . import meter as meters
+from . import refs
+from .player import PlayerError
 
 
 def _print(data, as_json):
@@ -135,6 +142,27 @@ def cmd_compare(args):
     elif args.b == "spec":
         _print(compare.compare_spec(a, spec), args.json)
         return 0
+    elif args.b == "refs" or args.b.startswith("refs:"):
+        stored = refs.all_refs(_refs_folder(args))
+        if not stored:
+            print("No references stored in {0}".format(refs.folder(_refs_folder(args))), file=sys.stderr)
+            return 2
+        kind = args.b.split(":", 1)[1] if ":" in args.b else "full"
+        _print(compare.compare_envelope(a, refs.envelope(stored, kind), spec), args.json)
+        return 0
+    elif args.b.startswith("ref:"):
+        name, _, section = args.b[4:].partition(":")
+        stored = refs.find(name=name, where=_refs_folder(args))
+        if not stored:
+            print("No reference named {0}".format(name), file=sys.stderr)
+            return 2
+        sections = stored.get("sections") or {}
+        chosen = section or ("full" if "full" in sections else "track")
+        if chosen not in sections:
+            print("Reference {0} has no section {1}".format(name, chosen), file=sys.stderr)
+            return 2
+        _print(compare.compare_reference(a, sections[chosen], spec), args.json)
+        return 0
     else:
         b = _take(home, args.b)
     result = compare.compare_takes(a, b, spec, home=home)
@@ -188,6 +216,71 @@ def cmd_spec(args):
     return 0
 
 
+def _refs_folder(args):
+    """References follow --home when it is given, else $EARS_REFS / $EARS_HOME / the shared store."""
+    return Path(args.home).expanduser() / "refs" if getattr(args, "home", None) else None
+
+
+def _sections(values):
+    """--section drop=72-102 (seconds) -> {"drop": [72.0, 102.0]}."""
+    out = {}
+    for value in values or []:
+        name, _, span = value.partition("=")
+        start, _, end = span.partition("-")
+        try:
+            out[name.strip()] = [float(start), float(end)]
+        except ValueError:
+            raise ValueError("--section takes name=start-end in seconds, got {0!r}".format(value))
+    return out or None
+
+
+def cmd_ref(args):
+    where = _refs_folder(args)
+    if args.action == "list":
+        stored = refs.all_refs(where)
+        envelope = refs.envelope(stored, "full") if stored else None
+        _print({"folder": str(refs.folder(where)), "references": [refs.summary(item) for item in stored],
+                "envelope": envelope and {"references": envelope["references"], "scalars": envelope["scalars"],
+                                          "tempo": envelope["tempo"], "keys": envelope["keys"]}}, args.json)
+        return 0
+    if args.action == "setup":
+        state = refs.confirm_setup(where) if args.confirm else refs.setup_state(where)
+        try:
+            chain = meters.LoopbackInput().describe()
+        except meters.MeterError:
+            chain = None
+        _print({"confirmed": state, "loopback": chain, "warnings": refs.setup_warnings(None, chain, where)}, args.json)
+        return 0
+    if args.action == "delete":
+        for name in args.items:
+            refs.delete(name, where)
+        return 0
+    if args.action == "add":
+        for path in args.items:
+            _print(refs.summary(refs.add_file(path, name=args.name, sections=_sections(args.section), where=where)), args.json)
+        return 0
+    if args.action == "measure":
+        from .player import Spotify
+        player, source = Spotify(), meters.LoopbackInput()
+
+        def progress(read, total):
+            print("\r  {0:6.1f} / {1:.1f} s".format(read, total), end="", file=sys.stderr, flush=True)
+
+        for uri in args.items:
+            ref = refs.measure_stream(uri, player, source, name=args.name if len(args.items) == 1 else None,
+                                      sections=_sections(args.section), where=where, refresh=args.refresh, progress=progress)
+            print("", file=sys.stderr)
+            _print(dict(refs.summary(ref), cached=bool(ref.get("cached")), warnings=ref.get("warnings") or []), args.json)
+        return 0
+    raise ValueError("ref action must be list, add, measure, setup or delete")
+
+
+def cmd_meter(args):
+    result = meters.meter(meters.LoopbackInput(), args.seconds, kind=args.source)
+    _print(result, args.json)
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ears", description="Listening-loop analysis: notes, audio, compare, ledger.")
     parser.add_argument("--version", action="version", version="ears " + __version__)
@@ -232,6 +325,18 @@ def build_parser():
     item.set_defaults(func=cmd_calibrate)
     item = sub.add_parser("spec", help="print what the spec defines")
     item.set_defaults(func=cmd_spec)
+    item = sub.add_parser("ref", help="references: list, add <file>, measure <spotify uri>, setup, delete <name>")
+    item.add_argument("action", choices=("list", "add", "measure", "setup", "delete"))
+    item.add_argument("items", nargs="*", help="files (add), Spotify tracks (measure) or names (delete)")
+    item.add_argument("--name")
+    item.add_argument("--section", action="append", help="name=start-end in seconds (repeatable)")
+    item.add_argument("--refresh", action="store_true", help="measure again even if cached")
+    item.add_argument("--confirm", action="store_true", help="setup: record that Spotify and macOS are set up (M6)")
+    item.set_defaults(func=cmd_ref)
+    item = sub.add_parser("meter", help="measure what the Mac plays now (loopback, in memory)")
+    item.add_argument("--seconds", type=float, default=10.0)
+    item.add_argument("--source", choices=("live", "external"), default="external")
+    item.set_defaults(func=cmd_meter)
     return parser
 
 
@@ -239,7 +344,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (specs.SpecError, takes.TakeError, ValueError, OSError) as error:
+    except (specs.SpecError, takes.TakeError, refs.RefError, meters.MeterError, PlayerError, ValueError, OSError) as error:
         print("ears: {0}".format(error), file=sys.stderr)
         return 2
 

@@ -813,3 +813,18 @@ def test_ledger_is_append_only_history(tmp_path):
     ledger.record_verdict(tmp_path, "t1", "v")
     after = ledger.path(tmp_path).read_text()
     assert after.startswith(before) and len(after.splitlines()) == 3
+
+
+def test_left_behind_points_at_the_untitled_home_after_a_first_save(tmp_path, monkeypatch):
+    import ears
+    monkeypatch.delenv("EARS_HOME", raising=False)
+    monkeypatch.setattr(ears, "DEFAULT_ROOT", tmp_path / "Ears")
+    set_path = tmp_path / "NOVA Project" / "NOVA.als"
+    assert ears.left_behind(str(set_path), "NOVA") is None                 # nothing was recorded untitled
+    (tmp_path / "Ears" / "untitled").mkdir(parents=True)
+    (tmp_path / "Ears" / "untitled" / "ledger.jsonl").write_text("{}\n")
+    assert ears.left_behind(str(set_path), "NOVA") == tmp_path / "Ears" / "untitled"
+    assert ears.left_behind(None, None) is None                             # still unsaved: that is its home
+    (tmp_path / "NOVA Project" / "ears").mkdir(parents=True)
+    (tmp_path / "NOVA Project" / "ears" / "ledger.jsonl").write_text("{}\n")
+    assert ears.left_behind(str(set_path), "NOVA") is None                 # the saved set has its own takes now

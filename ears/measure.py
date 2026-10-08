@@ -873,3 +873,88 @@ def key_estimate(audio, a4_hz=440.0, start_weight=4.0, start_seconds=3.0):
     return {"key": _key_label(winner), "tonic": NOTE_NAMES[winner % 12], "mode": "major" if winner < 12 else "minor",
             "confidence": float(fit[winner]), "second": {"key": _key_label(runner), "confidence": float(fit[runner])},
             "chroma": [float(v) for v in holder[1]], "view": holder[2]}
+
+
+# ---------------------------------------------------------------------------
+# Tempo
+# ---------------------------------------------------------------------------
+
+_TEMPO_PRIOR_BPM = 120.0     # a log-normal prior centred here, one octave wide, settles half/double ambiguity
+_TEMPO_PRIOR_OCTAVES = 1.0
+_TEMPO_COMB = ((1.0, 1.0), (2.0, 0.5), (4.0, 0.25), (0.5, 0.5), (0.25, 0.25))   # (multiple of the period, weight)
+
+
+def tempo_estimate(audio, low_bpm=60.0, high_bpm=200.0):
+    """Tempo of a mix from the periodicity of its onset strength.
+
+    The detection function is the onset flux of `onsets` with its 1 s running mean removed; its autocorrelation
+    is scored at each beat period together with the bar-level periods (2 and 4 beats) and the period's halves
+    and quarters, weighted by a log-normal prior around 120 BPM, and the best period is refined by parabolic
+    interpolation. Half and double tempo remain the usual confusion (a loop-built mix repeats most strongly
+    at the half bar), so the second-best period is reported as well.
+    Returns {"bpm", "confidence" (0..1, autocorrelation at the period over its zero lag), "second": {...}};
+    bpm is None when the audio is shorter than 4 s or has no pulse.
+    """
+    x = _mono(audio)
+    rate = audio.rate
+    if len(x) < 4 * rate or not np.any(x):
+        return {"bpm": None, "confidence": 0.0, "second": {"bpm": None, "confidence": 0.0}}
+    size = max(256, 1 << int(round(math.log2(_ONSET_WINDOW_S * rate))))
+    hop = size // 4
+    frame_rate = rate / float(hop)
+    flux = _onset_flux(x, rate, size, hop)
+    flux = np.maximum(flux - ndimage.uniform_filter1d(flux, size=int(frame_rate) | 1, mode="nearest"), 0.0)
+    # Onset peaks are a frame or two wide, so a period that falls between whole frames would lose to one that
+    # happens to be a whole number of frames; smoothing over ~12 ms removes that bias.
+    flux = ndimage.gaussian_filter1d(flux, sigma=2.0, mode="nearest")
+    n = len(flux)
+    if n < 8 or not np.any(flux):
+        return {"bpm": None, "confidence": 0.0, "second": {"bpm": None, "confidence": 0.0}}
+    spectrum = np.fft.rfft(flux - flux.mean(), 2 * n)
+    ac = np.fft.irfft(spectrum * np.conj(spectrum))[:n]
+    if ac[0] <= 0.0:
+        return {"bpm": None, "confidence": 0.0, "second": {"bpm": None, "confidence": 0.0}}
+    ac = ac / ac[0]
+    shortest = max(1, int(math.floor(60.0 * frame_rate / high_bpm)))
+    longest = min(n // 4 - 1, int(math.ceil(60.0 * frame_rate / low_bpm)))
+    if longest <= shortest:
+        return {"bpm": None, "confidence": 0.0, "second": {"bpm": None, "confidence": 0.0}}
+
+    def at(lag):
+        lag = float(lag)
+        low = int(math.floor(lag))
+        if low + 1 >= n:
+            return 0.0
+        frac = lag - low
+        return float(ac[low] * (1.0 - frac) + ac[low + 1] * frac)
+
+    lags = np.arange(shortest, longest + 1)
+    bpms = 60.0 * frame_rate / lags
+    prior = np.exp(-0.5 * (np.log2(bpms / _TEMPO_PRIOR_BPM) / _TEMPO_PRIOR_OCTAVES) ** 2)
+    # A beat period also repeats at the bar (2 and 4 beats) and divides into eighths and sixteenths; a dotted
+    # period (1.5 beats), which hi-hats on every eighth or sixteenth also repeat at, has no events at its half
+    # (3 sixteenths) or quarter (1.5 sixteenths).
+    total = sum(weight for _, weight in _TEMPO_COMB)
+    comb = np.array([sum(weight * at(multiple * lag) for multiple, weight in _TEMPO_COMB) for lag in lags]) / total
+    score = np.maximum(comb, 0.0) * prior
+    order = np.argsort(-score)
+    best = int(order[0])
+
+    def refine(index):
+        lag = float(lags[index])
+        if 0 < index < len(lags) - 1:
+            a, b, c = score[index - 1], score[index], score[index + 1]
+            denominator = a - 2.0 * b + c
+            if denominator < 0.0:
+                lag += 0.5 * (a - c) / denominator
+        return 60.0 * frame_rate / lag
+
+    second = next((int(i) for i in order[1:] if abs(lags[int(i)] - lags[best]) > max(2, 0.06 * lags[best])), None)
+    out = {"bpm": round(float(refine(best)), 1), "confidence": round(max(0.0, min(1.0, at(lags[best]))), 3)}
+    if second is None or score[best] <= 0.0:
+        out["second"] = {"bpm": None, "confidence": 0.0}
+    else:
+        out["second"] = {"bpm": round(float(refine(second)), 1), "confidence": round(max(0.0, min(1.0, at(lags[second]))), 3)}
+    if out["confidence"] < 0.05:
+        out["bpm"] = None
+    return out

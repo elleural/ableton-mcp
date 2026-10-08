@@ -32,3 +32,18 @@ def home(set_path=None, set_name=None):
     if set_path:
         return Path(set_path).expanduser().resolve().parent / "ears"
     return DEFAULT_ROOT / safe_name(set_name)
+
+
+def left_behind(set_path=None, set_name=None):
+    """The untitled home whose takes a set left behind when it was first saved, or None.
+
+    An unsaved set keeps its takes in ~/Music/AbletonMCP/Ears/untitled; saving moves the home beside the set,
+    so those takes stay where they were until someone moves the folder.
+    """
+    if os.environ.get("EARS_HOME") or not set_path:
+        return None
+    current = home(set_path, set_name)
+    untitled = DEFAULT_ROOT / safe_name(None)
+    if (current / "ledger.jsonl").is_file() or not (untitled / "ledger.jsonl").is_file():
+        return None
+    return untitled

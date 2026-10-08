@@ -128,6 +128,7 @@ targets; the bundled one is NOVA's, `ears/specs/nova.spec.json`):
 | `analyze_audio(take=...)` | Tier sums T1–T5 as the game layers them: −14 LUFS / −1 dBTP, key, mono sub, stems + returns cancel the mix, tempo consistency, tier ladder, masking, the game's analyser bands, phone survival; `strict` adds the delivery-file checks |
 | `compare` | Deltas between two takes (or against the spec), loudness-matched, each improved, regressed or within the measured noise; `blind` gives an X/Y packet for a fresh judge |
 | `takes` | The ledger of takes, `keep` the best one, `restore` an earlier take's notes and parameters |
+| `ref`, `meter` | References: a Spotify track played in the desktop app and measured through the interface's loopback (a 4th Gen Scarlett's inputs 3-4, or a virtual device), once, as numbers only; or a file you own. `compare(take, "refs")` places a take's balance, dynamics and width against them; `meter` measures whatever plays now |
 
 The analysis is the standalone `ears` package; its CLI runs without Live and doubles as the soundtrack's
 acceptance script:

@@ -1,6 +1,6 @@
 # AbletonMCP tools
 
-Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 82 tools.
+Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 84 tools.
 Conventions for every tool (addressing, units, errors) are in [PRD.md section 8](PRD.md#8-conventions-contract-for-every-tool).
 
 ## Status and overview
@@ -617,7 +617,7 @@ key, loudness per file and sha256 checksums.
 
 ## Listening loop
 
-### `capture(set=None, variation=None, tempo=None, tempos=None, mode='tap', bars=None, note=None, spec=None, wait=50, cancel=False, analyze=True)`
+### `capture(set=None, variation=None, tempo=None, tempos=None, mode='tap', bars=None, note=None, spec=None, wait=300, cancel=False, analyze=True)`
 
 Record the set's stems and mix in real time (audible) into a take, then analyze it (listening loop).
 
@@ -626,7 +626,7 @@ from its track output with every return and the main mix; the second cycle is ke
 tempo (default: the set's middle tempo) or tempos=[...]/"all" for a sweep (one take per tempo).
 variation: "A", "B" or all. mode "solo" records each part soloed (with return effects; slower).
 bars shortens the loop for quick checks. note: what changed (ledger). Leaves the set as found.
-Waits up to `wait` s (max 600); while recording, call capture() with no arguments to keep waiting.
+Waits up to `wait` s (max 600); call capture() with no arguments to keep waiting for it or get its result.
 
 ### `analyze_notes(set=None, band=None, parts=None, tempo=None, spec=None, image=True)` *(read-only)*
 
@@ -641,7 +641,9 @@ Warns: grid, lead rests. Reports kick pattern, density, motif. band: "LOW"/"MID"
 
 Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
-a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation) or "spec".
+a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
+"refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
+sections) or "ref:<name>[:<section>]" (one reference, default section "full").
 Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
 blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
 
@@ -654,6 +656,33 @@ action "list": newest takes (filter by set, tempo, variation) with verdicts and 
 "restore": write `take`'s snapshot back into its part tracks: clip notes, device parameters, mixer
 (one undo step). Devices added or removed since are listed, not undone; plugin state is not covered.
 Destructive: restore overwrites the current notes and settings (dry_run=True previews).
+
+## Listening loop: references and meter
+
+### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, confirm=False, wait=300.0)` *(destructive)*
+
+References the soundtrack is compared against: measured once, kept as numbers, never as audio.
+
+action:
+- "measure": play Spotify track(s) in the Spotify app (uri: spotify:track:..., an open.spotify.com/track
+  link, or a list) and measure each through the audio interface's loopback. Takes as long as the music;
+  waits up to `wait` s, then call ref() again. Cached per track (refresh=True re-measures).
+  sections={"drop": [72, 102]} measures only those spans (seconds). Stop Live first.
+- "add": measure a file Frederic owns (file=path; sections optional).
+- "list": stored references, their sections (track, full, sparse) and the shared envelope.
+- "play" (uri, position s) / "pause": the Spotify app, for listening.
+- "setup": what is left of the one-time setup; confirm=True records that Spotify's normalisation and
+  crossfade are off and macOS alerts play through another output.
+- "status" (default) / "cancel": the running measurement. "delete": remove reference `name`.
+Then compare(take, "refs") compares a take's top tier against all references.
+
+### `meter(seconds=10.0, source='live')` *(read-only)*
+
+Measure what the Mac is playing now, for `seconds` (at most 120), in memory; numbers only.
+
+source "live": Live's output through the same loopback as the references (start playback first, e.g.
+fire_scene); includes integrated loudness and true peak. source "external": another player such as
+Spotify; level-independent numbers only (its level depends on the player's volume and normalisation).
 
 ## Music theory
 

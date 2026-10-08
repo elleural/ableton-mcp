@@ -19,6 +19,7 @@ from ears import compare as ears_compare
 from ears import ledger
 from ears import notes as ears_notes
 from ears import plan as ears_plan
+from ears import refs as ears_refs
 from ears import report
 from ears import spec as ears_spec
 from ears import take as ears_take
@@ -128,7 +129,8 @@ def _others(home, item):
 
 def _analyze(home, spec, item, strict=False, images=True):
     folder = item.path / "images" if images else None
-    result = ears_analyze.analyze_take(item, spec, strict_mode=strict, others=_others(home, item), images_dir=folder)
+    result = ears_analyze.analyze_take(item, spec, strict_mode=strict, others=_others(home, item), images_dir=folder,
+                                       envelope=ears_refs.balance_envelope())
     full = report.write(result, item.path / ("report-strict.json" if strict else "report.json"))
     ledger.record_verdict(home, item.id, result["verdict"], "strict" if strict else "audio")
     return result, full
@@ -378,7 +380,9 @@ def compare(a: str = "latest", b: str = "best", blind: bool = False, variation: 
             spec: str | None = None) -> dict:
     """Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
-    a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation) or "spec".
+    a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
+    "refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
+    sections) or "ref:<name>[:<section>]" (one reference, default section "full").
     Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
     blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
     """
@@ -387,8 +391,29 @@ def compare(a: str = "latest", b: str = "best", blind: bool = False, variation: 
     first = _resolve(home, a)
     if str(b).strip() == "spec":
         return dict(ears_compare.compare_spec(first, spec_obj), a=first.id, b="spec")
+    if str(b).strip().startswith("refs"):
+        kind = str(b).strip().split(":", 1)[1] if ":" in str(b) else "full"
+        stored = ears_refs.all_refs()
+        if not stored:
+            raise ToolError("No references stored yet: ref(action='measure', uri=...) or ref(action='add', file=...)")
+        try:
+            result = ears_compare.compare_envelope(first, ears_refs.envelope(stored, kind), spec_obj, variation=variation)
+        except ValueError as error:
+            raise ToolError(str(error))
+        deltas = result["deltas"]
+        return dict(result, a=first.id, b=str(b), deltas=deltas[:14], more_deltas=max(0, len(deltas) - 14))
     if str(b).startswith("ref:"):
-        raise ToolError("Reference comparisons arrive with Phase 4 (ref_add); compare against a take or 'spec' for now")
+        _, _, rest = str(b).partition(":")
+        name, _, section = rest.partition(":")
+        stored = ears_refs.find(name=name)
+        if not stored:
+            raise ToolError("No reference named {0}; ref(action='list') shows them".format(name))
+        sections = stored.get("sections") or {}
+        chosen = section or ("full" if "full" in sections else "track")
+        if chosen not in sections:
+            raise ToolError("Reference {0} has no section {1} (it has {2})".format(name, chosen, ", ".join(sections)))
+        result = ears_compare.compare_reference(first, sections[chosen], spec_obj, variation)
+        return dict(result, a=first.id, b="ref:{0}:{1}".format(stored["name"], chosen))
     second = _resolve(home, b, against=first)
     if first.id == second.id:
         raise ToolError("Both sides are take {0}".format(first.id))
@@ -420,11 +445,17 @@ def takes(action: str = "list", take: str | None = None, set: str | None = None,
     (one undo step). Devices added or removed since are listed, not undone; plugin state is not covered.
     Destructive: restore overwrites the current notes and settings (dry_run=True previews).
     """
-    home = _home()
+    song = call("bounce_song_info")
+    home = _home(song)
     action = (action or "list").strip().lower()
     if action == "list":
         entries = ledger.query(home, set_name=set, tempo=tempo, variation=variation, limit=max(1, min(50, int(limit))))
-        return {"home": str(home), "takes": entries, "best": ledger.state(home)[1]}
+        out = {"home": str(home), "takes": entries, "best": ledger.state(home)[1]}
+        behind = ears.left_behind(song.get("set_path"), song.get("set_name"))
+        if behind:
+            out["hint"] = ("Takes from before this set was first saved are in {0}; move that folder to {1} to keep "
+                           "using them (ledger, best takes, noise floors)".format(behind, home))
+        return out
     if not take:
         raise ToolError("action {0!r} needs take=<take id>".format(action))
     item = _resolve(home, take)

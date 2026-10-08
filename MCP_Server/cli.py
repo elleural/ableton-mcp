@@ -3,6 +3,8 @@
     ableton-mcp                 run the MCP server over stdio (what MCP clients launch)
     ableton-mcp install         link (or copy) the Remote Script into Live's User Library
     ableton-mcp doctor          check every link in the chain and say how to fix what is broken
+    ableton-mcp journal         what the Remote Script ran lately and what is in flight (--crash: before
+                                Live's last fatal error)
 """
 import argparse
 import json
@@ -226,12 +228,19 @@ def main(argv=None):
     install_parser.add_argument("--force", action="store_true", help="Replace an existing AbletonMCP Remote Script (kept as a backup)")
     doctor_parser = sub.add_parser("doctor", help="Diagnose the Live / Remote Script / MCP chain")
     doctor_parser.add_argument("--json", action="store_true")
+    journal_parser = sub.add_parser("journal", help="Commands Live ran for AbletonMCP, and what was in flight")
+    journal_parser.add_argument("--lines", type=int, default=40, help="How many recent lines to show (default 40)")
+    journal_parser.add_argument("--crash", action="store_true", help="Stop at Live's last fatal error (Log.txt)")
     args = parser.parse_args(argv)
 
     if args.command == "install":
         return install(copy=args.copy, force=args.force)
     if args.command == "doctor":
         return doctor(as_json=args.json)
+    if args.command == "journal":
+        from .journal import report
+        print(report(lines=max(1, args.lines), crash=args.crash))
+        return 0
     from .server import main as serve
     serve()
     return 0

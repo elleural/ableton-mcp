@@ -359,7 +359,12 @@ the hardware goes; the Spotify one waits on a permission (below).
   measured; `ref(action="setup")` warns until "Play sound effects through" points elsewhere.
 - **Scene changes crashed Live once.** The live suite's scratch cleanup deleted 3 tracks, a return and 2 scenes in one
   main-thread tick and Live 12.4.6 died (FatalError `std::out_of_range` vector; `atos` on the logged stack resolves
-  `LSong::OnSceneTransactionCounterChanged` called from a Boost.Python call). The cleanup now deletes one object per
-  round trip, and the meter test creates no scene. Not reproduced on purpose.
+  `LSong::OnSceneTransactionCounterChanged` called from a Boost.Python call; the macOS crash report shows the same
+  main-thread stack: Live's 10 ms timer, the Remote Script's Python, a Live API call, then the scene handler, whose
+  exception hit a no-throw boundary and called `std::terminate`). The nearest symbols put that Live API call among the
+  Scene bindings, which fits the batch's `delete_scene` calls. It is the only FatalError in Live's log since 2026-10-06,
+  after 24 hours of uptime with thousands of commands. The cleanup now deletes one object per round trip, the meter
+  test creates no scene, every command is journaled (`ableton-mcp journal --crash`), and
+  `scripts/repro_scene_crash.py` rebuilds the state on a saved set to narrow it down. Not reproduced yet.
 - **Crash recovery re-arms tracks.** Recovery replays the undo history, which does not record arm changes: every track
   created armed came back armed (21 on the NOVA set), duplicated ones did not.

@@ -108,6 +108,20 @@ one command, and expose a status command.
 | `color_out(obj)` / `apply_color(obj, index or "#RRGGBB")` | Colours |
 | `jsonable(v)` | Live values to JSON |
 
+### Command journal (crash forensics)
+
+`journal.py` writes `~/Library/Logs/AbletonMCP/live-commands.log` from inside Live: a `start` line when a request
+arrives (with the client that sent it: `ableton-mcp:<pid>`, `pytest:<pid>`, ...), `run` when Live's main thread
+begins it, one `item` per batch command, the capture and bounce engines' `phase` changes, and `end` with status
+and duration. Every line is flushed at once, so when Live dies the last `run` or `item` without an `end` is what
+was running. Big parameters are summarised (`<list 500>`), never copied. `ableton-mcp journal` shows the recent
+lines and what is in flight; `ableton-mcp journal --crash` stops at Live's last FatalError in its `Log.txt`.
+`ABLETON_MCP_JOURNAL` moves it or turns it off (`off`; the offline tests do).
+
+The one crash so far (2026-10-07, `std::out_of_range` in `LSong::OnSceneTransactionCounterChanged`) came while a
+single batch deleted tracks, a return track and scenes in one tick. Until it is understood, delete structural
+objects one per call; `scripts/repro_scene_crash.py` (saved sets only) rebuilds that state to narrow it down.
+
 ## MCP server side (`MCP_Server/`, Python ≥ 3.10, mcp 2.x `MCPServer`)
 
 ```python

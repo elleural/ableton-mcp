@@ -3,9 +3,13 @@
 Offline tests import the Remote Script package, which imports `_Framework` (and handler modules
 may import `Live`). Outside Live those modules do not exist, so minimal stand-ins are installed.
 """
+import os
 import sys
 import types
 from pathlib import Path
+
+# The Remote Script's command journal belongs to the real Live; offline tests that load the package keep out of it.
+os.environ.setdefault("ABLETON_MCP_JOURNAL", "off")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:

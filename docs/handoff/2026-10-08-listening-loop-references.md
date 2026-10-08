@@ -43,6 +43,18 @@ pointed at (album tracks 2, 3, 8, 12):
   `[test:e2e_release]` tracks, return C, two scenes) and 21 tracks re-armed by the recovery. Clean them up only
   after Frederic saves, deleting one object per call.
 
+## The Live crash (2026-10-07 23:49)
+
+- What is known: one FatalError (`std::out_of_range` vector) in `LSong::OnSceneTransactionCounterChanged`, reached from a
+  Live API call made by the Remote Script, while the live suite's cleanup ran one batch (one main-thread tick) of
+  `delete_track` x3, `delete_return_track`, `delete_scene` x2 on the NOVA set; the Wi-Fi went down 11 minutes later
+  (unrelated). Recovery dropped the whole batch, so which deletion crashed is not known.
+- Now: every command and batch item is journaled before it runs (`~/Library/Logs/AbletonMCP/live-commands.log`;
+  `uv run ableton-mcp journal --crash` lines it up with Live's fatal error), the cleanup deletes one object per call.
+- To find the trigger: with the NOVA set saved, open a new empty set, save it, and run
+  `uv run python scripts/repro_scene_crash.py --go` (then `--shape scenes-batch`, `tracks-batch`, `separate`, and
+  `--rounds 5`). Each crash needs Live restarted; read the journal after each.
+
 ## Next
 
 1. Measure the four references, then `compare` the latest NOVA takes against them and hand the gaps to the

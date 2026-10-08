@@ -277,3 +277,54 @@ Use `display_value` for unit-based writes. `values.value_for_display_number` (bi
 
 - Saving through UI automation (`save_set`, `new_set`, `export_audio`): blocked on this Mac until Accessibility is granted. Opening sets and dialog handling are verified above.
 - `Browser.load_item` targets: drum pad, clip slot, hotswap (WS-D).
+
+## Listening loop capture (2026-10-07, Live 12.4.6, 44.1 kHz)
+
+Phase 0 spike of [listening-loop-prd.md](listening-loop-prd.md) §6.5, run on scratch tracks and then on the
+real NOVA set. These results replace every [verify] of PRD §6.
+
+- **No record length in Python.** `ClipSlot.fire()` takes no arguments (the Max LOM's `record_length` is not
+  exposed); `Song.trigger_session_record(record_length)` exists but records into the selected scene. The capture
+  engine records until it stops the transport and cuts in ears instead.
+- **Recording (Q1, Q4).** Firing an empty slot of an armed audio track in the same main-thread tick as the source
+  clips (transport stopped, global quantization 1 bar) starts recording on the same sample as the clips. The
+  recorded clip is warped, `start_marker` 0, `beat_to_sample_time(0)` = 0: no pre-roll. The file is finished when
+  the transport has stopped and the slot no longer records.
+- **Offset and gain (Q5, C3, C4).** Impulses at known beats land **0 samples** from the computed position for
+  the Post Mixer tap and for Resampling, at 120 and 140 BPM, with and without a lookahead Limiter on the source or
+  on another track: delay compensation covers recording from internal routes. A −18 dBFS tone records at
+  −21.010 dBFS RMS (exact). Calibration constant: 0 samples.
+- **Cancellation (Q6).** A soloed source recorded by its tap and by Resampling nulls to −67.5 dB. On the real set
+  (9 stems, 2 returns, empty master chain) stems + returns null the mix to 60.6–73.1 dB.
+- **Arming and routing (Q2, Q3).** Several capture tracks arm at once with Exclusive Arm on. `Sends Only`,
+  `Resampling`, every track and both returns are offered; taps are `Pre FX`, `Post FX`, `Post Mixer`.
+- **Files (Q8).** `create_audio_clip` works on audio tracks (calibration file). Recordings of an unsaved set go to
+  `~/Music/Ableton/Live Recordings/<date> Temp Project/Samples/Recorded/`, 24-bit at Live's rate. ears copies
+  its cuts into the take and deletes Live's temporary file.
+- **Transport.** Firing from stopped plays from `start_time`, whatever `current_song_time` says. Firing a Session
+  clip lights Back to Arrangement; `back_to_arranger = False` returns every track to the arrangement. Tracks
+  outside the capture keep playing their arrangement clips into the mix, so tap passes mute them.
+- **Solo mode and sidechain (Q7).** With every part of the variation fired and one part soloed, sidechain pumping
+  keyed from the kick survives: the soloed pad measures within 0.11 LU of its tap capture (envelope correlation
+  0.89). The kick is bit-identical across passes; synth stems are not sample-repeatable (null about −3 dB,
+  free-running oscillators and the lead's random pitch LFO), so compare works on measurements, not waveforms.
+- **Repeatability (PRD 13.1).** Three tap captures of the unchanged NOVA state at 140 BPM: T5 loudness spread
+  0.07 LU, true peak 0.24 dB, loudness range 0.07 LU, parts up to 0.26 LU (kick and perc 0.0). Written to
+  `<ears home>/calibration/noise.json`, which `compare` uses as its noise floor.
+- **Timeouts (Q9).** Not measured against a client limit. `capture` long-polls up to `wait` seconds (default 50,
+  max 600) and resumes on the next call, so any client timeout works; a 140 BPM tap capture takes 56 s, solo mode
+  for variation A 168 s.
+- **Deleted tracks.** Reading `name` of a track after `delete_track` raises a Boost `ArgumentError`; read it first.
+
+Snapshot and restore (`listening_snapshot`, `listening_restore`):
+
+- Parameter writes reach the undo history only when Live syncs them, after a command's undo step closed, so a
+  command that writes notes and parameters left two undo steps. `Song.sync_parameter_changes()` inside the step
+  makes it one (the restore does this; other commands do not yet).
+- `apply_note_modifications` can chain moves (60→67, 67→74, 74→81) in one call. A dry run leaves no undo step.
+- The NOVA set has a device in a rack *return* chain; snapshot paths name it `return:N`, which `refs.device`
+  does not address yet.
+- Timings on the real set (28 tracks, 220 devices, 12,130 parameters): snapshot 55 ms main thread (1.6 MB),
+  full dry-run restore 0.5 s round trip.
+- The shell decoded a request after every received chunk, quadratic in its size (750 ms for 1.6 MB); it now
+  decodes once the line is complete.

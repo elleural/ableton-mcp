@@ -1,6 +1,6 @@
 # AbletonMCP tools
 
-Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 78 tools.
+Generated from the code by `scripts/gen_tool_docs.py`; do not edit by hand. 82 tools.
 Conventions for every tool (addressing, units, errors) are in [PRD.md section 8](PRD.md#8-conventions-contract-for-every-tool).
 
 ## Status and overview
@@ -594,16 +594,15 @@ peak_dbfs, silent}]; delivery trims each take sample-exactly to the range and re
 Cancel a running bounce: recording stops, transport and arm states are restored, and the temporary
 "[bounce]" tracks are removed. With no bounce running, removes leftover "[bounce]" tracks.
 
-### `analyze_audio(path, sections=None, images=False)` *(read-only)*
+### `analyze_audio(path=None, sections=None, images=False, take=None, strict=False, spec=None)` *(read-only)*
 
-Measure an audio file so you can judge a mix without hearing it.
+Measure audio so you can judge a mix without hearing it: a file (path) or a listening-loop take.
 
-Returns loudness (integrated LUFS, range LU, true peak dBTP, short-term and momentary max), levels
-(sample peak, RMS, crest factor, DC offset, clipped samples), stereo (correlation -1..1; width =
-side/mid RMS, 0 = mono), spectrum (% of energy: sub <60 Hz, low 60-250, low_mid 250-2k, high_mid 2k-6k,
-high >6k), a short-term loudness curve, dropouts and plain-language notes. sections: "locators" (the
-bounce's locators, else Live's from 1.1.1) or [{name, start, end}] in seconds, for loudness per section.
-images=True adds a spectrogram and a waveform (PNG).
+path: loudness (LUFS, LU, dBTP), levels, stereo, spectrum (% per band), a loudness curve, dropouts and notes;
+sections: "locators" or [{name, start, end}] in seconds. take (id or "latest", from capture): the spec's
+checks on tier sums T1..T5 (game-style looping): loudness -14 LUFS / -1 dBTP, key, mono sub, stems+returns
+cancel the mix, tempo consistency; reports tier ladder, masking, analyser bands, phone survival.
+strict adds delivery-file checks (duration, seam, start, 48 kHz/24-bit). images=True adds two PNGs.
 
 ### `create_release(source, title, artist, album=None, year=None, genre=None, track_number=None, artwork=None, target_lufs=-14.0, true_peak=-1.0, formats=None, output_dir=None, stems=None)` *(destructive)*
 
@@ -615,6 +614,46 @@ dither), flac (24-bit), mp3 (320 kbps CBR), aac (256 kbps .m4a). artwork: JPEG o
 FLAC/MP3/M4A. stems: "auto" (the bounce's other files) or paths, copied unprocessed to Stems/. Output:
 ~/Music/AbletonMCP/Releases/<artist> - <title>/, replacing same-named files. release.json holds tempo,
 key, loudness per file and sha256 checksums.
+
+## Listening loop
+
+### `capture(set=None, variation=None, tempo=None, tempos=None, mode='tap', bars=None, note=None, spec=None, wait=50, cancel=False, analyze=True)`
+
+Record the set's stems and mix in real time (audible) into a take, then analyze it (listening loop).
+
+Plans from the spec (default "nova"): each part's Session clip for the tempo's band is fired and recorded
+from its track output with every return and the main mix; the second cycle is kept, so tails are folded.
+tempo (default: the set's middle tempo) or tempos=[...]/"all" for a sweep (one take per tempo).
+variation: "A", "B" or all. mode "solo" records each part soloed (with return effects; slower).
+bars shortens the loop for quick checks. note: what changed (ledger). Leaves the set as found.
+Waits up to `wait` s (max 600); while recording, call capture() with no arguments to keep waiting.
+
+### `analyze_notes(set=None, band=None, parts=None, tempo=None, spec=None, image=True)` *(read-only)*
+
+Check the stem clips' notes against the spec (no audio, under a second): run after every note edit.
+
+Fails: set.names, set.unwarped, notes.in_key (A minor, G# over E), notes.chord_tones (bass), notes.clash
+(stems a semitone apart), notes.shared_stem (the shared pad over every progression), notes.loop_length.
+Warns: grid, lead rests. Reports kick pattern, density, motif. band: "LOW"/"MID"/"HIGH" or a tempo
+(default every band). parts: ids like "bassA". image adds a piano roll coloured by chord-tone status.
+
+### `compare(a='latest', b='best', blind=False, variation=None, spec=None)` *(read-only)*
+
+Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
+
+a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation) or "spec".
+Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
+blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
+
+### `takes(action='list', take=None, set=None, tempo=None, variation=None, limit=10, notes=True, parameters=True, dry_run=False)` *(destructive)*
+
+The take history (ledger), the kept best take, and restoring an earlier take's notes and parameters.
+
+action "list": newest takes (filter by set, tempo, variation) with verdicts and which is best.
+"keep": mark `take` as the best of its set, tempo and variation (compare(b="best") uses it).
+"restore": write `take`'s snapshot back into its part tracks: clip notes, device parameters, mixer
+(one undo step). Devices added or removed since are listed, not undone; plugin state is not covered.
+Destructive: restore overwrites the current notes and settings (dry_run=True previews).
 
 ## Music theory
 

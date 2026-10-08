@@ -16,4 +16,6 @@ MODULES = [
     "devices",      # WS-D: devices, parameters, racks, chains, device actions
     "browser",      # WS-D: browser search, browse, load
     "bounce",       # WS-E: real-time bounce engine
+    "capture",      # listening loop: Session capture engine (docs/listening-loop-plan.md)
+    "listening",    # listening loop: snapshot and restore of notes, mixer and device parameters
 ]

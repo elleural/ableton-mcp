@@ -11,5 +11,6 @@ from . import (  # noqa: F401
     devices,      # WS-D: devices, parameters, racks
     browser,      # WS-D: browser search and loading
     export,       # WS-E: bounce, analysis, release
+    listening,    # listening loop: capture, analyze_notes, compare, takes (docs/listening-loop-prd.md)
     lom,          # lead: generic object-model access
 )

@@ -816,6 +816,10 @@ def bounce_start(ctx, start=0, end=None, tail=0, stems=None, include_returns=Fal
     if job and job.get("phase") in ACTIVE + ("recorded",):
         raise CommandError("busy", "Bounce {0} is still {1}".format(job["id"], job["phase"]),
                            hint="Poll get_bounce_status until it finishes, or call cancel_bounce.")
+    capture = ctx.state.get("capture")
+    if capture and capture.get("phase") not in (None, "idle", "done", "failed", "cancelled"):
+        raise CommandError("busy", "A capture is {0}; Live can record one thing at a time".format(capture.get("phase")),
+                           hint="Wait for it with capture(wait=...), or capture(cancel=True).")
     stale = [track.name for _, track in _bounce_tracks(song)]
     if stale:
         raise CommandError("busy", "Leftover bounce tracks exist: " + ", ".join(stale),

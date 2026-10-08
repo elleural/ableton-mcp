@@ -232,11 +232,17 @@ class AbletonMCP(ControlSurface):
                         # ahead to a JSON body, or any web page could drive Live (see docs/spikes.md).
                         self._send(client, self._error(None, "invalid_argument", "Expected a JSON request object; closing"))
                         return
+                    complete = "\n" in buffer
+                    if not complete and not buffer.rstrip().endswith("}"):
+                        # Requests are JSON lines: decode once the line is complete, so a large request
+                        # (a 1.6 MB listening_restore snapshot) is parsed about once, not once per chunk.
+                        # Legacy clients that send no newline still work: their request ends with "}".
+                        break
                     try:
                         request, end = decoder.raw_decode(buffer)
                     except ValueError:
-                        if "\n" not in buffer:
-                            break  # Incomplete request: wait for more data.
+                        if not complete:
+                            break  # A "}" inside an incomplete request: wait for more data.
                         self._send(client, self._error(None, "invalid_argument", "Malformed JSON request; closing"))
                         return
                     buffer = buffer[end:]

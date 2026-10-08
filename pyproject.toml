@@ -17,6 +17,8 @@ classifiers = [
 dependencies = [
     "mcp>=2.3,<3",
     "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
 ]
 
 [dependency-groups]
@@ -27,6 +29,7 @@ dev = [
 [project.scripts]
 ableton-mcp = "MCP_Server.cli:main"
 ableton-mcp-debug = "MCP_Server.debugger:main"
+ears = "ears.cli:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -34,7 +37,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 # The Remote Script ships in the wheel so `ableton-mcp install` can copy it into Live from any install.
-include = ["MCP_Server*", "AbletonMCP_Remote_Script*"]
+include = ["MCP_Server*", "AbletonMCP_Remote_Script*", "ears*"]
+
+[tool.setuptools.package-data]
+ears = ["specs/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

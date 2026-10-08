@@ -15,7 +15,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = ROOT / "MCP_Server" / "tools"
 SHELL_COMMANDS = {"reload_remote_script"}  # Handled by the Remote Script shell, not the registry.
-MAX_TOOLS = 80
+MAX_TOOLS = 90  # 80 for AbletonMCP 2 plus up to 10 for the listening loop (docs/listening-loop-plan.md)
 
 
 @pytest.fixture(scope="module")

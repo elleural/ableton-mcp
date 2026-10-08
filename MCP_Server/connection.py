@@ -10,10 +10,19 @@ import time
 
 HOST = os.environ.get("ABLETON_MCP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("ABLETON_MCP_PORT", "9877"))
-# Who is asking, for the Remote Script's command journal: "ableton-mcp:4242", "pytest:4243", ...
-CLIENT = os.environ.get("ABLETON_MCP_CLIENT") or "{0}:{1}".format(os.path.basename(sys.argv[0] or "") or "python", os.getpid())
 DEFAULT_TIMEOUT = 30.0
 CONNECT_TIMEOUT = 3.0
+
+
+def _client_name():
+    """Who is asking, for the Remote Script's command journal: "ableton-mcp:4242", "pytest:4243", "python:4244"."""
+    program = os.path.basename(sys.argv[0] or "") if sys.argv else ""
+    if not program or program.startswith("-"):      # python -c / python - (stdin)
+        program = "python"
+    return os.environ.get("ABLETON_MCP_CLIENT") or "{0}:{1}".format(program, os.getpid())
+
+
+CLIENT = _client_name()
 
 logger = logging.getLogger("ableton_mcp.connection")
 

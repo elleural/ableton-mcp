@@ -878,14 +878,15 @@ def drum_lanes(pattern, steps_per_beat=4, velocities=None, swing=0.0):
 
     pattern: {"Kick": "x---x---x---x---", ...}; "x" hit, "X" accent, "o" ghost, "-" "." or "_" rest;
     spaces and "|" are ignored. Each lane repeats on its own cycle (len(steps) / steps_per_beat beats).
-    swing (0..1) delays every second step by up to half a step (0.33 is close to a triplet shuffle).
+    swing (0..1) delays every second step by swing x half a step (MPC-style 50 + 25 x swing percent:
+    0.16 = 54 %, 0.32 = 58 %, 0.67 = triplet shuffle 66.7 %, 1 = 75 %).
     Returns [{"drum", "gm", "steps", "cycle", "hits": [[start, duration, velocity], ...]}].
     """
     if not isinstance(pattern, dict) or not pattern:
         raise TheoryError('pattern must map drum names to step strings, e.g. {"Kick": "x---x---x---x---", "Snare": "----x-------x---"}')
     steps_per_beat = _int_arg(steps_per_beat, "steps_per_beat", 1, 64)
     if isinstance(swing, bool) or not isinstance(swing, (int, float)) or not 0.0 <= swing <= 1.0:
-        raise TheoryError("swing must be 0..1 (0 straight, 0.33 about triplet feel, 1 = half a step), got {0!r}".format(swing))
+        raise TheoryError("swing must be 0..1 (0 straight, 0.67 triplet shuffle, 1 = half a step), got {0!r}".format(swing))
     levels = dict(DEFAULT_VELOCITIES)
     for name, value in (velocities or {}).items():
         target = _VELOCITY_KEYS.get(name) or _VELOCITY_KEYS.get(str(name).lower())

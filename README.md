@@ -141,6 +141,15 @@ Takes live in `<set folder>/ears/` for a saved set, else `~/Music/AbletonMCP/Ear
 overrides). Verified capture behaviour and calibration are in [docs/spikes.md](docs/spikes.md) and
 [docs/listening-loop-calibration.md](docs/listening-loop-calibration.md).
 
+### Producing like a pro
+
+Measurements are not ears. [docs/production/](docs/production/README.md) is a researched knowledge base for agents
+that make music here: a playbook of rules and the change loop to follow with the human producer
+([00-agent-playbook.md](docs/production/00-agent-playbook.md)), then digests on Live workflow, synthesis and
+Live's instruments, sound design recipes, drums and low end, gain staging, mixing, mastering and loudness,
+arrangement and harmony, the industrial/EBM/Nine Inch Nails palette, adaptive game music, judging audio without
+ears, and every Live 12.4.6 device's exact parameter names. The `pro-production` skill points agents there.
+
 ## Limits of Live's API
 
 | Not possible through Live's API | What AbletonMCP does instead |

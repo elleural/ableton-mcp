@@ -286,12 +286,15 @@ list; detail=True adds parameter metadata, hidden macros, full option lists and 
 
 ### `set_device_parameters(track, device, values)`
 
-Set several device parameters in one call; returns each new value and display string.
+Set several device parameters in one call; returns each new value and display string (compare
+it with what you asked for).
 
 values: {parameter name or index: value}. Numbers are raw values (min/max from get_device). Strings are
-display values with units ("-6 dB", "800 Hz", "1.2 kHz", "250 ms", "2.5 s", "30 %", "25L") or item
-names of switches and choosers ("Sine", "On"). Names match exactly, then by original name, then a
-unique substring. Failures are listed in "errors" without stopping the others.
+display values with units ("-6 dB", "800 Hz", "1.2 kHz", "250 ms", "2.5 s", "30 %", "25L"), item
+names of switches and choosers ("Sine", "On"), or note values on synced rates ("1/8" on Echo's
+L Synced). A display value outside the parameter's display range, or a label it does not show, is an
+error, never a clamp. Names match exactly, then by original name, then a unique substring. Failures
+are listed in "errors" without stopping the others.
 Example: set_device_parameters("Bass", "Auto Filter", {"Frequency": "800 Hz", "Resonance": 0.4}).
 
 ### `set_device(track, device, enabled=None, name=None, collapsed=None, compare_b=None, properties=None)`
@@ -642,8 +645,9 @@ Warns: grid, lead rests. Reports kick pattern, density, motif. band: "LOW"/"MID"
 Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
 a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
-"refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
-sections) or "ref:<name>[:<section>]" (one reference, default section "full").
+"refs" (the top tier against the range of every stored reference's full sections), "refs:sparse" (tier T2
+against their sparse sections), "refs:<kind>:<tier>" (any tier), or "ref:<name>[:<section>]" (one
+reference, default section "full"). Against references, dynamics are information only.
 Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
 blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
 
@@ -659,7 +663,7 @@ Destructive: restore overwrites the current notes and settings (dry_run=True pre
 
 ## Listening loop: references and meter
 
-### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, confirm=False, wait=300.0)` *(destructive)*
+### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, wait=300.0)` *(destructive)*
 
 References the soundtrack is compared against: measured once, kept as numbers, never as audio.
 
@@ -671,8 +675,8 @@ action:
 - "add": measure a file Frederic owns (file=path; sections optional).
 - "list": stored references, their sections (track, full, sparse) and the shared envelope.
 - "play" (uri, position s) / "pause": the Spotify app, for listening.
-- "setup": what is left of the one-time setup; confirm=True records that Spotify's normalisation and
-  crossfade are off and macOS alerts play through another output.
+- "setup": what is left of the one-time setup (Spotify's normalisation and crossfade off, volume 100,
+  macOS alerts through another output). Only Frederic confirms it: `uv run ears ref setup --confirm`.
 - "status" (default) / "cancel": the running measurement. "delete": remove reference `name`.
 Then compare(take, "refs") compares a take's top tier against all references.
 

@@ -45,12 +45,15 @@ def get_device(track: int | str, device: int | str | list[int | str], parameters
 
 @tool(idempotent=True)
 def set_device_parameters(track: int | str, device: int | str | list[int | str], values: dict[str, Any]) -> dict:
-    """Set several device parameters in one call; returns each new value and display string.
+    """Set several device parameters in one call; returns each new value and display string (compare
+    it with what you asked for).
 
     values: {parameter name or index: value}. Numbers are raw values (min/max from get_device). Strings are
-    display values with units ("-6 dB", "800 Hz", "1.2 kHz", "250 ms", "2.5 s", "30 %", "25L") or item
-    names of switches and choosers ("Sine", "On"). Names match exactly, then by original name, then a
-    unique substring. Failures are listed in "errors" without stopping the others.
+    display values with units ("-6 dB", "800 Hz", "1.2 kHz", "250 ms", "2.5 s", "30 %", "25L"), item
+    names of switches and choosers ("Sine", "On"), or note values on synced rates ("1/8" on Echo's
+    L Synced). A display value outside the parameter's display range, or a label it does not show, is an
+    error, never a clamp. Names match exactly, then by original name, then a unique substring. Failures
+    are listed in "errors" without stopping the others.
     Example: set_device_parameters("Bass", "Auto Filter", {"Frequency": "800 Hz", "Resonance": 0.4}).
     """
     return call("set_device_parameters", track=track, device=device, values=values)

@@ -189,14 +189,18 @@ def parse_root_note(value):
 # ---------------------------------------------------------------------------
 
 _NUMBER = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+_FRACTION = re.compile(r"\d\s*/\s*\d")
+STEP_LIMIT = 128  # a stepped parameter spans at most this many integer steps (0..127 included)
 
 
 def parse_display_number(text):
     """Number from a parameter display string, in DeviceParameter.display_value's canonical units.
 
     display_value counts frequencies in Hz and times in ms (docs/spikes.md), so '1.20 kHz' -> 1200,
-    '2.50 s' -> 2500, '35 ms' -> 35, '-6.0 dB' -> -6.0, '-inf dB' -> -inf, '25L' -> -25, 'C' -> 0.
-    Returns None when the string carries no number.
+    '22.0k' -> 22000 (Analog's filters), '2.50 s' -> 2500, '35 ms' -> 35, '-6.0 dB' -> -6.0, '-inf dB' -> -inf,
+    'inf s' -> inf, '25L' -> -25, 'C' -> 0. A ratio reads as its side other than 1, like display_value:
+    '4.00 : 1' -> 4 (Compressor Ratio), '1 : 1.15' -> 1.15 (Expansion Ratio). Returns None when the string
+    carries no number.
     """
     if text is None:
         return None
@@ -204,15 +208,22 @@ def parse_display_number(text):
     lowered = text.lower()
     if "-inf" in lowered:
         return float("-inf")
+    if "inf" in lowered:
+        return float("inf")
     if lowered in ("c", "center", "centre"):
         return 0.0
+    left, colon, right = text.partition(":")
+    if colon:
+        first, second = parse_display_number(left), parse_display_number(right)
+        if first is not None and second is not None:
+            return second if first == 1 else first
     match = _NUMBER.search(text)
     if not match:
         return None
     number = float(match.group(0))
     suffix = text[match.end():].strip().lower()
     unit = re.match(r"[a-z%]*", suffix).group(0)
-    if unit == "khz":
+    if unit in ("khz", "k"):
         number *= 1000.0
     elif unit in ("s", "sec", "secs", "second", "seconds"):
         number *= 1000.0
@@ -240,13 +251,21 @@ def set_display_number(parameter, target):
     target = float(target)
     try:
         parameter.display_value = target
-        shown = parse_display_number(parameter.str_for_value(parameter.value))
-        if shown is not None and (shown == target or abs(shown - target) <= max(abs(target) * 0.02, 0.011)):
+        if _close(parse_display_number(parameter.str_for_value(parameter.value)), target):
             return
     except Exception:
         pass
     # display_value rejected the write or landed elsewhere (unit mismatch): search the display string.
     parameter.value = value_for_display_number(parameter, target)
+
+
+def _close(shown, target):
+    """Whether a read-back display number shows `target`, allowing for display rounding."""
+    if shown is None:
+        return False
+    if math.isinf(shown) or math.isinf(target):
+        return shown == target
+    return abs(shown - target) <= max(abs(target) * 0.02, 0.011)
 
 
 def value_for_display_number(parameter, target, iterations=48):
@@ -259,7 +278,7 @@ def value_for_display_number(parameter, target, iterations=48):
     low_display = display_number(parameter, low)
     high_display = display_number(parameter, high)
     if low_display is None or high_display is None:
-        raise CommandError("unsupported", "Parameter '{0}' has no numeric display value".format(parameter.name))
+        raise CommandError("unsupported", "Parameter '{0}' has no numeric display value; pass a raw number".format(parameter.name))
     increasing = high_display >= low_display
     if target <= min(low_display, high_display):
         return low if increasing else high
@@ -302,10 +321,11 @@ def parameter_out(parameter, index=None, detail=False):
 
 
 def set_parameter(parameter, value):
-    """Set a parameter from a raw number, a display string ('-6 dB', '800 Hz') or a quantized item name.
+    """Set a parameter from a raw number, a display string ('-6 dB', '800 Hz', '1/8') or an item name.
 
-    Returns the parameter's new JSON description. Numbers are raw values clamped to the parameter
-    range; strings are matched against quantized items first, then parsed as display values.
+    Returns the parameter's new JSON description; its 'display' is what Live shows now, for the caller
+    to compare with the request. Numbers are raw values and must lie in the raw range. Strings are item
+    names on a quantized parameter, else step labels or display values (_set_display_string).
     """
     if not parameter.is_enabled:
         raise CommandError("unsupported", "Parameter '{0}' is disabled (macro-mapped or controlled by Max)".format(parameter.name))
@@ -330,15 +350,91 @@ def set_parameter(parameter, value):
             if raw is None:
                 raise CommandError("invalid_argument", "'{0}' is not a value of '{1}'. Options: {2}".format(value, parameter.name, ", ".join(items)))
         else:
-            target = parse_display_number(value)
-            if target is None:
-                raise CommandError("invalid_argument", "Cannot read a number from {0!r} for parameter '{1}'".format(value, parameter.name))
-            set_display_number(parameter, target)
+            _set_display_string(parameter, value)
             return parameter_out(parameter)
     else:
         raise CommandError("invalid_argument", "Value for '{0}' must be a number or string, got {1!r}".format(parameter.name, value))
     parameter.value = raw
     return parameter_out(parameter)
+
+
+def _set_display_string(parameter, text):
+    """Set a continuous (not quantized) parameter from a string: a step label, else a display value.
+
+    A label matches case- and space-insensitively ('1/16' finds Roar's '1 / 16'). When the labels are
+    names rather than numbers (note values, note names) or the string is a fraction, it must be a
+    label: '1/8' never reads as the number 1. A display value must lie within what the parameter
+    can show: '25 %' on Drum Buss Transients (-1.00 .. 1.00) is an error, not a silent 1.00.
+    """
+    labels = step_labels(parameter)
+    key = _label_key(text)
+    for raw, label in labels:
+        if _label_key(label) == key:
+            parameter.value = raw
+            return
+    fraction = _FRACTION.search(text) is not None
+    if labels and (fraction or _labels_are_names(labels)):
+        raise CommandError("invalid_argument", "'{0}' is not a value of '{1}' (now {2}). Values: {3}".format(
+            text, parameter.name, parameter.str_for_value(parameter.value), _labels_out(labels)))
+    target = parse_display_number(text)
+    if target is None:
+        raise CommandError("invalid_argument", "Cannot read a number from {0!r} for parameter '{1}'".format(text, parameter.name))
+    low_text, high_text = str(parameter.str_for_value(parameter.min)), str(parameter.str_for_value(parameter.max))
+    if fraction and not (_FRACTION.search(low_text) or _FRACTION.search(high_text)):
+        raise CommandError("invalid_argument", "'{0}' is a fraction, but '{1}' shows {2} .. {3} (now {4}), not note values".format(
+            text, parameter.name, low_text, high_text, parameter.str_for_value(parameter.value)))
+    ends = [parse_display_number(low_text), parse_display_number(high_text)]
+    if None not in ends:
+        # Beyond an end, the write would land on that end: allowed only when the end shows the target anyway.
+        end = min(max(target, min(ends)), max(ends))
+        if not _close(end, target):
+            raise CommandError("invalid_argument", "'{0}' is outside the display range of '{1}': {2} .. {3} (now {4})".format(
+                text, parameter.name, low_text, high_text, parameter.str_for_value(parameter.value)))
+    set_display_number(parameter, target)
+
+
+def step_labels(parameter):
+    """[(raw, label)] for every integer step of a stepped parameter, else [].
+
+    Many parameters Live does not quantize still step through whole numbers with a label per step:
+    note values (Echo 'L Synced' is -6..0 and shows '1/64' .. '1'), note names (Roar 'FB Note'),
+    '8  / 16'. Whole-number bounds 2 to STEP_LIMIT apart make a parameter stepped; the usual 0..1
+    continuous range does not.
+    """
+    low, high = float(parameter.min), float(parameter.max)
+    if parameter.is_quantized or not (low.is_integer() and high.is_integer() and 2 <= high - low <= STEP_LIMIT):
+        return []
+    return [(float(raw), str(parameter.str_for_value(float(raw)))) for raw in range(int(low), int(high) + 1)]
+
+
+def _label_key(text):
+    return "".join(str(text).split()).lower()
+
+
+def _labels_are_names(labels):
+    """Whether step labels are names rather than numbers: none reads as a number, or two different
+    labels read as the same one ('1/8' and '1/4' both read 1; 'C0' and 'C#0' both read 0)."""
+    readings = {}
+    for _, label in labels:
+        number = parse_display_number(label)
+        if number is None:
+            continue
+        rest = _label_key(_NUMBER.sub("", label, count=1))  # '1/8' -> '/8'; '-0.0 dB' and '0.0 dB' -> 'db'
+        if readings.setdefault(number, rest) != rest:
+            return True
+    return not readings
+
+
+def _labels_out(labels):
+    """Step labels for a message: all of them when they are names, else 'first .. last'."""
+    shown = []
+    for _, label in labels:
+        text = " ".join(label.split())
+        if text and text not in shown:
+            shown.append(text)
+    if _labels_are_names(labels):
+        return ", ".join(shown)
+    return "{0} .. {1}".format(shown[0], shown[-1])
 
 
 def volume_db(parameter):

@@ -48,8 +48,8 @@ Clip tools use clip time (1.1.1 = clip start); arrangement tools use song time.
 - Pitch: MIDI number or note name in Live's convention, C3 = 60.
 - Mixer: volume and sends in dB, pan -1..1. Quantization: "1/16", "1/8T", "1 bar".
 - set_device_parameters: numbers are raw values (get_device shows min/max; out of range is an error); \
-strings are display values ("-6 dB", "800 Hz", "30 %", "2 s") or item names ("Sine"). write_automation \
-takes display units by default.
+strings are display values within the parameter's display range ("-6 dB", "800 Hz", "30 %", "2 s"), item names \
+("Sine") or note values on synced rates ("1/8"). write_automation takes display units by default.
 
 Sounds: add_device and create_track(device=...) take any Live device by name ("Operator", "Drift", \
 "Glue Compressor", "DS Kick"). Presets, drum kits, samples and plug-ins: search_browser, then \

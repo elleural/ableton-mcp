@@ -1,6 +1,7 @@
-"""Unit tests for WS-D parameter and reference parsing (handlers/devices.py): display units, option
-matching, booleans, chain paths and drum notes. Live is replaced by small fakes."""
-import math
+"""Unit tests for WS-D parameter and reference parsing (handlers/devices.py): set_device_parameters, option
+matching, booleans, chain paths and drum notes. Live is replaced by small fakes; display units and step labels
+are values.set_parameter's, tested in test_values.py."""
+import types
 
 import pytest
 
@@ -9,113 +10,28 @@ from AbletonMCP_Remote_Script.errors import CommandError
 
 core.load_handlers()  # the full registry, so this module never leaves a partial one for other tests
 from AbletonMCP_Remote_Script.handlers import devices  # noqa: E402
+from tests.unit import parameter_fakes as fakes  # noqa: E402
 
 
-@pytest.mark.parametrize("text, number", [
-    ("-6.0 dB", -6.0), ("800 Hz", 800.0), ("1.20 kHz", 1200.0), ("2.50 s", 2500.0), ("35.0 ms", 35.0),
-    ("30 %", 30.0), ("25L", -25.0), ("50R", 50.0), ("C", 0.0), ("-inf dB", float("-inf")), ("+12 st", 12.0),
-    ("0.50 ", 0.5), ("1 sec", 1000.0), (" 4 bars", 4.0),
-])
-def test_normalized_display_units(text, number):
-    assert devices.normalized_display(text) == number
+class Device(object):
+    name = "Echo"
+
+    def __init__(self, *parameters):
+        self.parameters = list(parameters)
 
 
-@pytest.mark.parametrize("text", ["Off", "", None, "Sine"])
-def test_normalized_display_without_number(text):
-    assert devices.normalized_display(text) is None
-
-
-def test_close_tolerates_display_rounding():
-    assert devices._close(2500.0, 2500.0)
-    assert devices._close(1198.0, 1200.0)          # "1.20 s" shows 3 significant digits
-    assert devices._close(0.0, 0.0)
-    assert not devices._close(200.0, 2000.0)
-    assert devices._close(float("-inf"), float("-inf"))
-    assert not devices._close(None, 1.0)
-
-
-class TimeParameter(object):
-    """A continuous time parameter like Reverb's Decay Time: raw 0..1 maps to 1 ms .. 60 s.
-
-    It shows "xx.x ms" below one second and "x.xx s" above. display_value is in `unit_ms` milliseconds
-    (1 = ms like Live; 1000 = a parameter whose display_value were seconds).
-    """
-
-    def __init__(self, unit_ms=1.0, accepts_display=True):
-        self.min, self.max, self.value = 0.0, 1.0, 0.5
-        self.name = self.original_name = "Decay Time"
-        self.is_quantized, self.is_enabled = False, True
-        self.unit_ms, self.accepts_display = unit_ms, accepts_display
-
-    @staticmethod
-    def ms(raw):
-        return 60000.0 ** raw
-
-    def str_for_value(self, raw):
-        ms = self.ms(raw)
-        return "{0:.1f} ms".format(ms) if ms < 1000 else "{0:.2f} s".format(ms / 1000.0)
-
-    @property
-    def display_value(self):
-        return self.ms(self.value) / self.unit_ms
-
-    @display_value.setter
-    def display_value(self, target):
-        if not self.accepts_display:
-            raise RuntimeError("display_value is not settable")
-        self.value = min(max(math.log(max(target * self.unit_ms, 1.0)) / math.log(60000.0), 0.0), 1.0)
-
-
-@pytest.mark.parametrize("make", [TimeParameter, lambda: TimeParameter(unit_ms=1000.0), lambda: TimeParameter(accepts_display=False)])
-@pytest.mark.parametrize("text, milliseconds", [("2.5 s", 2500.0), ("2500 ms", 2500.0), ("250 ms", 250.0), ("1 s", 1000.0), ("40 s", 40000.0)])
-def test_set_parameter_display_strings_in_any_unit(make, text, milliseconds):
-    out = devices.set_parameter(make(), text)
-    assert devices._close(devices.normalized_display(out["display"]), milliseconds), out
-
-
-def test_set_parameter_clamps_beyond_range():
-    assert devices.set_parameter(TimeParameter(accepts_display=False), "100 s")["value"] == 1.0
-    assert devices.set_parameter(TimeParameter(accepts_display=False), "0.1 ms")["value"] == 0.0
-
-
-def test_set_parameter_numbers_are_raw():
-    parameter = TimeParameter()
-    assert devices.set_parameter(parameter, 0.25)["value"] == 0.25
-    with pytest.raises(CommandError) as error:  # out of the raw range: an error, never a silent clamp
-        devices.set_parameter(parameter, 7)
-    assert "raw range" in error.value.message
-
-
-def test_set_parameter_rejects_text_without_number():
-    with pytest.raises(CommandError) as error:
-        devices.set_parameter(TimeParameter(), "long")
-    assert error.value.code == "invalid_argument"
-
-
-def test_set_parameter_rejects_disabled_parameter():
-    parameter = TimeParameter()
-    parameter.is_enabled = False
-    with pytest.raises(CommandError) as error:
-        devices.set_parameter(parameter, "1 s")
-    assert error.value.code == "unsupported"
-
-
-class Quantized(object):
-    min, max, value = 0.0, 2.0, 0.0
-    name = original_name = "Size Smoothing"
-    is_quantized, is_enabled = True, True
-    value_items = ["None", "Slow", "Fast"]
-
-    def str_for_value(self, raw):
-        return self.value_items[int(raw)]
-
-
-def test_set_parameter_quantized_items_by_name():
-    parameter = Quantized()
-    assert devices.set_parameter(parameter, "fast")["display"] == "Fast"
-    with pytest.raises(CommandError) as error:
-        devices.set_parameter(parameter, "Medium")
-    assert "None, Slow, Fast" in error.value.message
+def test_set_device_parameters_sets_through_values_and_lists_each_failure(monkeypatch):
+    """Display strings go through values.set_parameter: a note value lands on its step, and a display value
+    outside the range is listed in errors (never clamped) while the other parameters are still set."""
+    device = Device(fakes.echo_l_synced(), fakes.drum_buss_transients(), fakes.percent("Dry Wet"))
+    monkeypatch.setattr(devices.refs, "device", lambda song, track, ref: (device, None, 1))
+    monkeypatch.setattr(devices, "summary", lambda target, index: {"index": index, "name": target.name})
+    out = devices.set_device_parameters(types.SimpleNamespace(song=None), "Lead", "Echo",
+                                        {"L Synced": "1/16", "Transients": "25 %", "Dry Wet": "30 %"})
+    assert [(item["index"], item["name"], item["display"]) for item in out["parameters"]] == [(0, "L Synced", "1/16"), (2, "Dry Wet", "30 %")]
+    assert [(item["parameter"], item["code"]) for item in out["errors"]] == [("Transients", "invalid_argument")]
+    assert "-1.00 .. 1.00 (now 0.15)" in out["errors"][0]["error"]
+    assert device.parameters[1].value == 0.15
 
 
 OPTIONS = ["Poly", "Mono", "Stereo", "Unison"]

@@ -171,6 +171,10 @@ Live test fixtures (`tests/live/conftest.py`):
   - `scratch.track(label, kind="midi" | "audio")` returns the track **name**. Address tracks by that name, because indices shift while other builders work.
   - `scratch.return_track(label)` and `scratch.scene(label)` work the same way.
 - `song_state` snapshots tempo, meter, loop, metronome, record modes, key and scale, and restores them afterwards.
+- `track_names(live)`, `scene_names(live)` and `lom_names(live, path, collection)` return every name, in Live's order.
+  One `lom_get` shows at most `limit` names per list of objects (32 by default; `truncated: true` with `offset` and
+  `shown` when that is not all of them), so never look a name up in a single answer's `items`. On a 36-track set
+  that skipped the scratch tracks past index 31. `MCP_Server/tools/lom.py` has `lom_names(path, collection)` for tools.
 - The whole live session holds an exclusive lock (`.live-test.lock`), so builders never run live tests concurrently. Keep live test files short, ideally under 60 s.
 
 Call your MCP tool functions directly in live tests (`from MCP_Server.tools.tracks import set_mixer`). The

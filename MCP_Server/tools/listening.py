@@ -25,6 +25,7 @@ from ears import spec as ears_spec
 from ears import take as ears_take
 
 from ..app import call, tool
+from .lom import lom_names
 from .references import loopback_busy
 
 ACTIVE = ("route", "prepare", "fire", "starting", "recording", "collect", "restore", "verifying", "aborting")
@@ -479,8 +480,7 @@ def takes(action: str = "list", take: str | None = None, set: str | None = None,
         out = {"home": str(home), "takes": entries, "best": ledger.state(home)[1]}
         behind = None
         if song.get("set_path") and not entries:
-            names = call("lom_get", path="live_set", properties=["tracks"])["values"]["tracks"].get("items") or []
-            behind = ears.left_behind(song.get("set_path"), song.get("set_name"), names)
+            behind = ears.left_behind(song.get("set_path"), song.get("set_name"), lom_names("live_set", "tracks"))
         if behind:
             out["hint"] = ("Takes recorded before this set was first saved seem to be in {0} (their tracks match this "
                            "set's); ask the user before moving that folder to {1}".format(behind, home))

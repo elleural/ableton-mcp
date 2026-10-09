@@ -642,8 +642,9 @@ Warns: grid, lead rests. Reports kick pattern, density, motif. band: "LOW"/"MID"
 Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
 a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
-"refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
-sections) or "ref:<name>[:<section>]" (one reference, default section "full").
+"refs" (the top tier against the range of every stored reference's full sections), "refs:sparse" (tier T2
+against their sparse sections), "refs:<kind>:<tier>" (any tier), or "ref:<name>[:<section>]" (one
+reference, default section "full"). Against references, dynamics are information only.
 Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
 blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
 
@@ -659,7 +660,7 @@ Destructive: restore overwrites the current notes and settings (dry_run=True pre
 
 ## Listening loop: references and meter
 
-### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, confirm=False, wait=300.0)` *(destructive)*
+### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, wait=300.0)` *(destructive)*
 
 References the soundtrack is compared against: measured once, kept as numbers, never as audio.
 
@@ -671,8 +672,8 @@ action:
 - "add": measure a file Frederic owns (file=path; sections optional).
 - "list": stored references, their sections (track, full, sparse) and the shared envelope.
 - "play" (uri, position s) / "pause": the Spotify app, for listening.
-- "setup": what is left of the one-time setup; confirm=True records that Spotify's normalisation and
-  crossfade are off and macOS alerts play through another output.
+- "setup": what is left of the one-time setup (Spotify's normalisation and crossfade off, volume 100,
+  macOS alerts through another output). Only Frederic confirms it: `uv run ears ref setup --confirm`.
 - "status" (default) / "cancel": the running measurement. "delete": remove reference `name`.
 Then compare(take, "refs") compares a take's top tier against all references.
 
@@ -698,13 +699,16 @@ notes: note names or numbers -> MIDI number, names, frequency. list: available s
 
 ## Object-model escape hatch
 
-### `lom_get(path, properties=None)` *(read-only)*
+### `lom_get(path, properties=None, offset=0, limit=32)` *(read-only)*
 
 Read an object of Live's object model by path, with all property values or only `properties`.
 
 Paths use Max for Live style: "live_set tracks 0 mixer_device volume", "live_set view selected_track",
-"live_app view". Lists are summarised as counts and names. Use the curated tools first; this reaches
-anything they do not cover.
+"live_app view". A list of objects (a property, or a path such as "live_set tracks") gives `count` and
+the names of up to `limit` items (1..1000) from index `offset`. When those are not the whole list, the
+result adds truncated: true, `offset` and `shown`: a name missing from `items` may still exist, so page
+on (offset + shown) or raise `limit` before concluding it is absent. Use the curated tools first; this
+reaches anything they do not cover.
 
 ### `lom_set(path, property, value)` *(destructive)*
 

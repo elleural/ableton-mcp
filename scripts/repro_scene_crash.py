@@ -30,7 +30,14 @@ def lom(live, kind, **params):
 
 
 def names(live, collection):
-    return lom(live, "get", path="live_set", properties=[collection])["values"][collection]["items"]
+    """Every name in the collection, in Live's order: one lom_get shows a window of names, so page through them."""
+    found = []
+    while True:
+        summary = lom(live, "get", path="live_set", properties=[collection], offset=len(found), limit=1000)["values"][collection]
+        page = summary.get("items", [])
+        found += page
+        if not page or len(found) >= summary.get("count", 0):
+            return found
 
 
 def build(live):

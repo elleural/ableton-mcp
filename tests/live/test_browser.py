@@ -11,6 +11,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from MCP_Server.tools.browser import browse, load_from_browser, search_browser
 from MCP_Server.tools.devices import add_device, get_devices, set_device
+from tests.live.conftest import track_names
 
 
 def error_of(function, *args, **kwargs):
@@ -30,8 +31,7 @@ def view_state(live):
 
 
 def track_path(live, name):
-    tracks = live.send_command("lom_get", {"path": "live_set", "properties": ["tracks"]})["values"]["tracks"]["items"]
-    return "live_set tracks {0}".format(tracks.index(name))
+    return "live_set tracks {0}".format(track_names(live).index(name))
 
 
 def a_sample(query="kick", category="drums"):

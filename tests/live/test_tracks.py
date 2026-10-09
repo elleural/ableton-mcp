@@ -13,6 +13,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from MCP_Server.tools.tracks import (create_bus, create_track, delete_track, duplicate_track, get_meters, get_mixer,
                                      get_routing_options, get_track, set_mixer, set_track)
+from tests.live.conftest import lom_names
 
 PREFIX = "[test:tracks]"
 
@@ -28,7 +29,7 @@ def error_message(function, *args, **kwargs):
 
 
 def _items(live, collection):
-    return live.send_command("lom_get", {"path": "live_set", "properties": [collection]})["values"][collection].get("items", [])
+    return lom_names(live, "live_set", collection)
 
 
 def _delete_scratch_returns(live):

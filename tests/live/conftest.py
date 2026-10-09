@@ -62,12 +62,29 @@ def lom_value(live, path, prop):
     return live.send_command("lom_get", {"path": path, "properties": [prop]})["values"][prop].get("value")
 
 
+def lom_names(live, path, collection):
+    """Every name in a list of Live objects, in Live's order (position = index).
+
+    One lom_get shows a window of names (32 by default, `truncated` when that is not all of them), so never test
+    membership against a single answer's `items`: on a 36-track set the cleanup missed the tracks past index 31.
+    """
+    names = []
+    while True:
+        params = {"path": path, "properties": [collection], "offset": len(names), "limit": 1000}
+        summary = live.send_command("lom_get", params)["values"][collection]
+        assert "error" not in summary, "lom_get {0} {1}: {2}".format(path, collection, summary["error"])
+        page = summary.get("items", [])
+        names += page
+        if not page or len(names) >= summary.get("count", 0):
+            return names
+
+
 def track_names(live):
-    return live.send_command("lom_get", {"path": "live_set", "properties": ["tracks"]})["values"]["tracks"].get("items", [])
+    return lom_names(live, "live_set", "tracks")
 
 
 def scene_names(live):
-    return live.send_command("lom_get", {"path": "live_set", "properties": ["scenes"]})["values"]["scenes"].get("items", [])
+    return lom_names(live, "live_set", "scenes")
 
 
 class Scratch(object):
@@ -103,14 +120,15 @@ class Scratch(object):
     def cleanup(self):
         """Delete every track, return track and scene whose name starts with this scratch prefix.
 
-        One read, then one deletion per round trip. A single batch (all deletions in one main-thread tick)
-        crashed Live 12.4.6 on a large set on 2026-10-07: FatalError std::out_of_range in
-        LSong::OnSceneTransactionCounterChanged after deleting tracks, a return and scenes in one tick.
+        Every name is read first (all of them: see lom_names), then one deletion per round trip. A single batch
+        (all deletions in one main-thread tick) crashed Live 12.4.6 on a large set on 2026-10-07: FatalError
+        std::out_of_range in LSong::OnSceneTransactionCounterChanged after deleting tracks, a return and scenes in
+        one tick.
         """
         collections = ("tracks", "return_tracks", "scenes")
-        found = self.live.send_command("lom_get", {"path": "live_set", "properties": list(collections)})["values"]
+        found = dict((collection, lom_names(self.live, "live_set", collection)) for collection in collections)
         for collection, method in zip(collections, ("delete_track", "delete_return_track", "delete_scene")):
-            names = found[collection].get("items", [])
+            names = found[collection]
             for index in reversed(range(len(names))):
                 # Live prefixes return track names with their letter ("C-[test:x] verb").
                 if re.sub(r"^[A-Z]-", "", names[index]).startswith(self.prefix):

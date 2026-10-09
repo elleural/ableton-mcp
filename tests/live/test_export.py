@@ -15,6 +15,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from MCP_Server.audio.ffmpeg import available, decode, probe
 from MCP_Server.connection import AbletonError
 from MCP_Server.tools import export
+from tests.live.conftest import track_names
 
 pytestmark = pytest.mark.skipif(not available(), reason="ffmpeg/ffprobe not installed")
 
@@ -44,8 +45,7 @@ def write_bursts(path):
 
 
 def track_path(live, name):
-    names = live.send_command("lom_get", {"path": "live_set", "properties": ["tracks"]})["values"]["tracks"]["items"]
-    return "live_set tracks {0}".format(names.index(name))
+    return "live_set tracks {0}".format(track_names(live).index(name))
 
 
 def get(live, path, *properties):

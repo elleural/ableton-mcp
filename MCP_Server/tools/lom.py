@@ -1,18 +1,41 @@
 """Escape hatch: reach any property or function of Live's object model by path."""
 from typing import Any
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..app import call, tool
+
+PAGE = 1000  # lom_get's largest limit (MAX_LIST_LIMIT in AbletonMCP_Remote_Script/lom.py)
 
 
 @tool(read_only=True)
-def lom_get(path: str, properties: list[str] | None = None) -> dict:
+def lom_get(path: str, properties: list[str] | None = None, offset: int = 0, limit: int = 32) -> dict:
     """Read an object of Live's object model by path, with all property values or only `properties`.
 
     Paths use Max for Live style: "live_set tracks 0 mixer_device volume", "live_set view selected_track",
-    "live_app view". Lists are summarised as counts and names. Use the curated tools first; this reaches
-    anything they do not cover.
+    "live_app view". A list of objects (a property, or a path such as "live_set tracks") gives `count` and
+    the names of up to `limit` items (1..1000) from index `offset`. When those are not the whole list, the
+    result adds truncated: true, `offset` and `shown`: a name missing from `items` may still exist, so page
+    on (offset + shown) or raise `limit` before concluding it is absent. Use the curated tools first; this
+    reaches anything they do not cover.
     """
-    return call("lom_get", path=path, properties=properties)
+    return call("lom_get", path=path, properties=properties, offset=offset, limit=limit)
+
+
+def lom_names(path, collection):
+    """Every name in a list of Live objects (`collection` of the object at `path`), in Live's order.
+
+    lom_get answers with a window of names, so code that looks a name up must page through all of them.
+    """
+    names = []
+    while True:
+        summary = call("lom_get", path=path, properties=[collection], offset=len(names), limit=PAGE)["values"][collection]
+        if "error" in summary:
+            raise ToolError("Cannot read '{0} {1}': {2}".format(path, collection, summary["error"]))
+        page = summary.get("items") or []
+        names += page
+        if not page or len(names) >= summary.get("count", 0):
+            return names
 
 
 @tool(destructive=True)

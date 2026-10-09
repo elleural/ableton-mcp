@@ -2,23 +2,28 @@
 from .. import lom
 from ..core import command
 from ..errors import CommandError
-from ..values import jsonable
 
 
 @command("lom_get", readonly=True)
-def lom_get(ctx, path, properties=None):
-    """Read an object at path: all property values, or only the named properties."""
+def lom_get(ctx, path, properties=None, offset=0, limit=lom.LIST_LIMIT):
+    """Read an object at path: all property values, or only the named properties.
+
+    Every list of objects in the answer (and a path that is one) shows the names of `limit` items from `offset`.
+    """
+    offset, limit = lom.check_window(offset, limit)
     obj, normalized = lom.resolve(ctx.song, ctx.app, path)
     if properties is None:
         if not lom._is_live_object(obj):
-            return {"path": normalized, "value": jsonable(obj)}
-        return lom.describe(obj, normalized)
+            out = {"path": normalized}
+            out.update(lom.summarize(obj, offset, limit))
+            return out
+        return lom.describe(obj, normalized, offset=offset, limit=limit)
     if isinstance(properties, str):
         properties = [properties]
     out = {"path": normalized, "values": {}}
     for name in properties:
         try:
-            out["values"][name] = lom.summarize(getattr(obj, name))
+            out["values"][name] = lom.summarize(getattr(obj, name), offset, limit)
         except Exception as error:
             out["values"][name] = {"error": str(error)}
     return out

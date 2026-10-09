@@ -5,6 +5,9 @@ Paths follow Max for Live's style, with spaces, dots or brackets between tokens:
     "live_set.view.selected_track"
     "live_app view"
 A path that does not start with live_set/song or live_app/app starts at the song.
+
+A list of Live objects is summarised as its count and the names of a window of items (`offset`, `limit`);
+`truncated` marks a window that is not the whole list, so a name missing from it may still exist.
 """
 import re
 
@@ -23,6 +26,10 @@ BLOCKED_METHODS = {
 }
 # Path tokens that lead to Python control-surface objects (including AbletonMCP itself), not Live objects.
 BLOCKED_PATH_TOKENS = {"control_surfaces"}
+
+# Names shown per list of objects: by default, and at most (lom_get's `limit`; browse pages the same way).
+LIST_LIMIT = 32
+MAX_LIST_LIMIT = 1000
 
 _LIST_CHILDREN = (
     "tracks", "return_tracks", "visible_tracks", "scenes", "cue_points", "clip_slots", "arrangement_clips",
@@ -105,18 +112,35 @@ def _is_live_object(value):
     return hasattr(value, "canonical_parent") or module.startswith("Live") or module in _live_module_names()
 
 
-def summarize(value, max_items=32):
-    """Compact JSON for a property value: primitives as-is, objects and lists summarised."""
+def check_window(offset=None, limit=None):
+    """(offset, limit) for the window on lists of objects, defaults filled in; anything else is invalid_argument."""
+    offset = 0 if offset is None else offset
+    limit = LIST_LIMIT if limit is None else limit
+    whole = all(isinstance(value, int) and not isinstance(value, bool) for value in (offset, limit))
+    if not (whole and offset >= 0 and 1 <= limit <= MAX_LIST_LIMIT):
+        raise CommandError("invalid_argument", "offset must be an integer >= 0 and limit an integer from 1 to {0} (got offset={1!r}, limit={2!r})".format(MAX_LIST_LIMIT, offset, limit))
+    return offset, limit
+
+
+def summarize(value, offset=0, limit=LIST_LIMIT):
+    """Compact JSON for a property value: primitives as-is, objects and lists summarised.
+
+    A list of Live objects gives its count and the names of up to `limit` items from index `offset` (validated by
+    check_window). When those are not all of them, truncated/offset/shown say so: items[i] is item offset + i.
+    """
     if _is_sequence(value):
         items = list(value)
         if items and _is_live_object(items[0]):
             names = []
-            for item in items[:max_items]:
+            for item in items[offset:offset + limit]:
                 try:
                     names.append(str(item.name))
                 except Exception:
                     names.append(type(item).__name__)
-            return {"count": len(items), "items": names}
+            out = {"count": len(items), "items": names}
+            if len(names) < len(items):
+                out.update(truncated=True, offset=offset, shown=len(names))
+            return out
         return {"value": jsonable(items)}
     if _is_live_object(value):
         out = {"object": type(value).__name__}
@@ -149,14 +173,14 @@ def _doc(attribute):
     return " ".join(doc.split()) or None
 
 
-def describe(obj, path, values=True):
+def describe(obj, path, values=True, offset=0, limit=LIST_LIMIT):
     properties, methods = members(obj)
     out = {"path": path, "type": type(obj).__name__, "properties": {}, "methods": sorted(methods)}
     for name, descriptor in sorted(properties.items()):
         entry = {"settable": descriptor.fset is not None}
         if values:
             try:
-                entry.update(summarize(getattr(obj, name)))
+                entry.update(summarize(getattr(obj, name), offset, limit))
             except Exception as error:
                 entry["error"] = str(error)
         out["properties"][name] = entry

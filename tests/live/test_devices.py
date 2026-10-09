@@ -84,6 +84,28 @@ def test_parameters_in_display_units(scratch):
     assert frequency["display"].startswith("800")
 
 
+def test_note_values_and_display_ranges(scratch):
+    """Note values select their step on stepped parameters Live does not quantize, ratios read like
+    display_value, and a display value outside the display range is an error instead of a clamp."""
+    track = scratch.track("steps", "audio")
+    for name in ("Echo", "Drum Buss", "Roar", "Compressor", "Auto Filter"):
+        add_device(track, name)
+    shown = dict((item["name"], item["display"]) for item in set_device_parameters(
+        track, "Echo", {"L Synced": "1/16", "Mod Rate": "3/16", "L 16th": "6"})["parameters"])
+    assert shown == {"L Synced": "1/16", "Mod Rate": "3/16", "L 16th": "6 "}, shown
+    assert "Values: 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1" in error_of(set_device_parameters, track, "Echo", {"L Synced": "1/5"})
+    assert set_device_parameters(track, "Roar", {"FB Synced": "1/8"})["parameters"][0]["display"] == "1 / 8"
+    shown = dict((item["name"], item["display"]) for item in set_device_parameters(
+        track, "Auto Filter", {"LFO Rate": "1.5", "LFO 16th": "4/16"})["parameters"])
+    assert shown == {"LFO Rate": "1.5", "LFO 16th": "4  / 16"}, shown
+    message = error_of(set_device_parameters, track, "Drum Buss", {"Transients": "25 %"})
+    assert "outside the display range of 'Transients': -1.00 .. 1.00" in message, message
+    assert set_device_parameters(track, "Drum Buss", {"Transients": "0.25"})["parameters"][0]["display"] == "0.25"
+    shown = dict((item["name"], item["display"]) for item in set_device_parameters(
+        track, "Compressor", {"Ratio": "2.5 : 1", "Expansion Ratio": "1 : 1.5"})["parameters"])
+    assert shown == {"Ratio": "2.50 : 1", "Expansion Ratio": "1 : 1.50"}, shown
+
+
 def test_set_device_and_type_specific_properties(scratch):
     synth = scratch.track("wavetable", "midi")
     side = scratch.track("sidechain", "audio")

@@ -370,7 +370,7 @@ def summary(device, index=None, path=None):
 
 def _db(parameter):
     """Volume in dB from the parameter's display ("-inf" when silent)."""
-    value = normalized_display(parameter.str_for_value(parameter.value))
+    value = units.parse_display_number(parameter.str_for_value(parameter.value))
     if value is None:
         value = units.volume_db(parameter)
     if value is None:
@@ -647,98 +647,6 @@ def chain_or_return(rack, ref):
                     return item
         raise not_found("Return chain", ref, ["return:{0} {1}".format(index, item.name) for index, item in enumerate(returns)])
     return refs.chain(rack, ref)
-
-
-# ---------------------------------------------------------------------------
-# Parameters
-# ---------------------------------------------------------------------------
-
-_UNIT_NUMBER = re.compile(r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)\s*([A-Za-z%°]*)")
-
-
-def normalized_display(text):
-    """Number from a display string in canonical units: Hz for frequencies, ms for times.
-
-    '1.20 kHz' -> 1200, '2.50 s' -> 2500, '35.0 ms' -> 35, '-6.0 dB' -> -6, '25L' -> -25.
-    Returns None when the text has no number.
-    """
-    if text is None:
-        return None
-    raw = str(text).strip()
-    lowered = raw.lower()
-    if "-inf" in lowered:
-        return float("-inf")
-    if "inf" in lowered:
-        return float("inf")
-    if lowered in ("c", "center", "centre"):
-        return 0.0
-    match = _UNIT_NUMBER.search(raw)
-    if not match:
-        return None
-    number = float(match.group(1))
-    unit = match.group(2).lower()
-    if unit == "khz":
-        number *= 1000.0
-    elif unit in ("s", "sec", "secs", "seconds"):
-        number *= 1000.0
-    elif unit == "l":
-        number = -abs(number)
-    return number
-
-
-def _close(shown, target):
-    if shown is None:
-        return False
-    if math.isinf(target) or math.isinf(shown):
-        return shown == target
-    return abs(shown - target) <= max(abs(target) * 0.02, 0.011)
-
-
-def set_parameter(parameter, value):
-    """Set a parameter like values.set_parameter, with display strings in any unit verified.
-
-    Numbers are raw values and quantized parameters take item names (values.set_parameter). A display
-    string for a continuous parameter is converted to canonical units (Hz, ms, dB, %), written through
-    display_value (which uses those units: "1.20 s" reads 1200.0), and read back; when the read-back
-    does not match, a bisection over str_for_value finds the raw value.
-    """
-    if not isinstance(value, str) or parameter.is_quantized:
-        return units.set_parameter(parameter, value)
-    if not parameter.is_enabled:
-        raise CommandError("unsupported", "Parameter '{0}' is disabled (macro-mapped or controlled by Max)".format(parameter.name))
-    target = normalized_display(value)
-    if target is None:
-        raise CommandError("invalid_argument", "Cannot read a number from {0!r} for parameter '{1}'".format(value, parameter.name))
-    try:
-        parameter.display_value = target
-    except Exception:
-        pass
-    if not _close(normalized_display(parameter.str_for_value(parameter.value)), target):
-        parameter.value = bisect_display(parameter, target)
-    return units.parameter_out(parameter)
-
-
-def bisect_display(parameter, target, iterations=48):
-    low, high = float(parameter.min), float(parameter.max)
-    low_shown = normalized_display(parameter.str_for_value(low))
-    high_shown = normalized_display(parameter.str_for_value(high))
-    if low_shown is None or high_shown is None:
-        raise CommandError("unsupported", "Parameter '{0}' has no numeric display value; pass a raw number".format(parameter.name))
-    increasing = high_shown >= low_shown
-    if target <= min(low_shown, high_shown):
-        return low if increasing else high
-    if target >= max(low_shown, high_shown):
-        return high if increasing else low
-    for _ in range(iterations):
-        middle = (low + high) / 2.0
-        shown = normalized_display(parameter.str_for_value(middle))
-        if shown is None:
-            break
-        if (shown < target) == increasing:
-            low = middle
-        else:
-            high = middle
-    return (low + high) / 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -1049,7 +957,7 @@ def set_device_parameters(ctx, track, device, values):
     for key, value in values.items():
         try:
             parameter = refs.parameter(target, key)
-            entry = set_parameter(parameter, value)
+            entry = units.set_parameter(parameter, value)
             position = refs.index_of(parameters, parameter)
             results.append(dict({"index": position}, **entry))
         except CommandError as error:

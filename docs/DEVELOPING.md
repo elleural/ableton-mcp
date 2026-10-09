@@ -99,7 +99,8 @@ one command, and expose a status command.
 | `parse_pitch(v)` / `pitch_name(p, flats=False)` | C3 = 60 |
 | `parse_root_note(v)` | 0..11 |
 | `parameter_out(param, index=None, detail=False)` | JSON for a parameter |
-| `set_parameter(param, value)` | Number = raw, string = display value or item name |
+| `set_parameter(param, value)` | Number = raw (in range), string = item name, step label (`"1/8"`) or display value within the displayed range; never clamps silently |
+| `step_labels(param)` | `[(raw, label)]` of a stepped parameter that is not quantized (Echo `L Synced` shows `1/64` .. `1`), else `[]` |
 | `set_display_number(param, x)` | Write in display units |
 | `display_number(param)` | Read in display units |
 | `volume_db(param)` / `set_volume_db(param, db)` | `"-inf"` is allowed |

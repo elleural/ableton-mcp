@@ -1,11 +1,12 @@
 """Fixtures for live tests against the running Ableton Live.
 
-Several builders share one Live instance, so every live test session holds an exclusive file lock
-(see docs/PLAN.md, shared-Live protocol). Tests create scratch tracks and scenes named
-"[test:<ws>] ..." and delete them afterwards; they never modify pre-existing material.
+Several builders share one Live instance, so every live test session holds an exclusive file lock, the same
+file for every checkout and worktree on the machine (see docs/PLAN.md, shared-Live protocol). Tests create
+scratch tracks and scenes named "[test:<ws>] ..." and delete them afterwards; they never modify pre-existing material.
 """
 import contextlib
 import fcntl
+import os
 import re
 from pathlib import Path
 
@@ -13,7 +14,9 @@ import pytest
 
 from MCP_Server.connection import AbletonConnection, AbletonError
 
-LOCK_PATH = Path(__file__).resolve().parents[2] / ".live-test.lock"
+# Outside every checkout, since they all drive the same Live. Not under $TMPDIR: that is an environment setting a
+# sandbox or launcher may change per process, and the lock only works if every process finds the same file.
+DEFAULT_LOCK_PATH = "~/Library/Caches/AbletonMCP/live.lock"
 
 # Song properties tests may change; snapshotted before and restored after each test using `song_state`.
 SONG_STATE = [
@@ -24,10 +27,17 @@ SONG_STATE = [
 ]
 
 
+def lock_path():
+    """The lock file every checkout shares; ABLETON_MCP_LIVE_LOCK moves it (give every checkout the same value)."""
+    return Path(os.environ.get("ABLETON_MCP_LIVE_LOCK") or DEFAULT_LOCK_PATH).expanduser()
+
+
 @contextlib.contextmanager
 def live_lock():
-    """Exclusive access to the shared Live instance (blocks until other builders finish)."""
-    with open(LOCK_PATH, "w") as handle:
+    """Exclusive access to the shared Live instance (blocks until other builders finish, in any checkout)."""
+    path = lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as handle:                    # "a": never truncate whatever the path points at
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             yield

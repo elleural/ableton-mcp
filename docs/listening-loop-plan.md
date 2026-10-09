@@ -131,7 +131,7 @@ and `compare` need a reference envelope.
 Lead (main loop): spec and report contracts, measurement core, capture spike and engine, integration,
 review synthesis. Agent N (notes ear), I (images), M (spectral measurements): Sonnet. Agent R
 (snapshot/restore in the Remote Script): Opus. Review of the finished branch: Opus. Live work is
-serialised through the live-test lock (`.live-test.lock`).
+serialised through the shared-Live lock (PLAN.md, shared-Live protocol).
 
 ## 8. Phase 4: references and the meter (2026-10-08)
 

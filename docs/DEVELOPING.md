@@ -171,7 +171,7 @@ Live test fixtures (`tests/live/conftest.py`):
   - `scratch.track(label, kind="midi" | "audio")` returns the track **name**. Address tracks by that name, because indices shift while other builders work.
   - `scratch.return_track(label)` and `scratch.scene(label)` work the same way.
 - `song_state` snapshots tempo, meter, loop, metronome, record modes, key and scale, and restores them afterwards.
-- The whole live session holds an exclusive lock (`.live-test.lock`), so builders never run live tests concurrently. Keep live test files short, ideally under 60 s.
+- The whole live session holds an exclusive lock on `~/Library/Caches/AbletonMCP/live.lock`, the same file for every checkout and worktree (`ABLETON_MCP_LIVE_LOCK` moves it), so builders never run live tests or reloads concurrently: a run waits while another holds the lock, whichever checkout it runs from. `lsof ~/Library/Caches/AbletonMCP/live.lock` lists the processes holding or waiting for it. Keep live test files short, ideally under 60 s.
 
 Call your MCP tool functions directly in live tests (`from MCP_Server.tools.tracks import set_mixer`). The
 decorator returns the plain function, so you get dicts back, and this tests both halves at once.

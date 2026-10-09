@@ -38,7 +38,7 @@ core change implements it locally in its own module and reports it.
 
 There is one Live instance and six builders. To share it safely:
 
-1. **Lock.** Live tests and hot reloads run under an exclusive lock. The live pytest fixture takes `fcntl.flock` on `$TMPDIR/ableton-mcp-live.lock` for the whole session. Reload through `uv run python -m tests.live.reload`, which also takes the lock.
+1. **Lock.** Live tests and hot reloads run under an exclusive lock. The live pytest fixture takes `fcntl.flock` on `~/Library/Caches/AbletonMCP/live.lock` for the whole session: one file for every checkout and worktree on the machine, since they all drive the same Live (`ABLETON_MCP_LIVE_LOCK` moves it). Reload through `uv run python -m tests.live.reload`, which also takes the lock. Both go through `live_lock()` in `tests/live/conftest.py`.
 2. **Scratch only.** Tests create tracks and scenes named `[test:<ws>] …` and delete them in teardown, even on failure. They never modify pre-existing tracks, scenes, returns or the master. Global song state they touch (tempo, loop, metronome, transport) is snapshotted and restored.
 3. **Resolve by name, not index.** Other builders may add or remove tracks between your calls. Within a test, look up scratch tracks by name.
 4. **Isolated imports.** A handler module that fails to import is reported by reload and skipped, without breaking the others. Still run `python -m py_compile` on a module before reloading.

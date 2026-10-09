@@ -12,6 +12,7 @@ tool pitfalls. Then read the digest for the job in front of you:
 | Job | Read |
 | --- | --- |
 | Choosing or designing a sound | 02 synthesis and Live's instruments, 03 sound design recipes, 11 listening without ears |
+| Scanning many presets for a role | 13 preset scanning (gates, probes, calibration on the producer's sounds) |
 | Kick, bass, drums, groove | 04 drums and low end |
 | Levels, meters, loudness numbers | 05 gain staging and metering |
 | Mixing | 06 mixing (with 05 and 11) |

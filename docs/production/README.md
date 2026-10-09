@@ -26,6 +26,7 @@ producer's words into causes and first moves, and the tool pitfalls. The `pro-pr
 | 10 | [Adaptive game music](10-game-audio-adaptive-music.md) | make stems, tiers and loops a game plays |
 | 11 | [Listening without ears](11-listening-without-ears.md) | judge audio from measurements, compare takes, run auditions with a human |
 | 12 | [Live 12 devices reference](12-live-devices-reference.md) | set device parameters (purpose, key parameters, pro settings, pitfalls) |
+| 13 | [Scanning presets by role](13-preset-scanning.md) | shortlist presets for a role from the whole library (gates, measures, calibration, what Live's pads contain) |
 | - | [Live 12.4.6 device parameters](reference/live-12.4.6-device-parameters.md) ([JSON](reference/live-12.4.6-device-parameters.json)) | need the exact parameter names, ranges and items, dumped from the running Live |
 
 Regenerate the parameter reference after a Live update with `scripts/dump_device_parameters.py` (it only touches

@@ -131,6 +131,11 @@ What to measure for each kind of change (tools: `bounce` + `analyze_audio`, `cap
   listening, fire the clips of one variation. Captures set the middle tempo and restore it afterwards.
 - Recording auditions through the loopback means soloing and muting: restore every solo, mute and tempo you
   changed, and stop the transport.
+- **A soloed track plays even when its activator is off** (Live 12.4.6, found 2026-10-09). Switch A/B versions by
+  solo (solo the next, then release the current), never by muting soloed tracks. Session clips that were playing when
+  the transport stopped resume when anything starts it: solo what you want to hear. (13)
+- The fader stops at +6 dB: put big level trims on the chain's last Utility `Output`. Check the producer's sound's own
+  level before matching to it: NOVA's base pad peaked near 0 dBFS alone, 14 dB over the mix's pad stem. (13, 05)
 
 ## Working with the producer
 
@@ -158,6 +163,7 @@ What to measure for each kind of change (tools: `bounce` + `analyze_audio`, `cap
 | You are about to | Read |
 | --- | --- |
 | choose, read or design a sound | 02, 03, then 11 |
+| scan a library of presets for a role | 13 |
 | work on kick, bass, drums or groove | 04 |
 | set levels or reason about loudness | 05, 07 |
 | mix | 06 (with 05 and 11) |

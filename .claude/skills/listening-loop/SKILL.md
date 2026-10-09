@@ -5,6 +5,9 @@ description: How a composing agent checks its own music in Ableton Live through 
 
 # Listening loop protocol
 
+Measurements diagnose; the producer decides. Before choosing sounds or mixing, read the `pro-production` skill and
+`docs/production/00-agent-playbook.md` (one change at a time, keep the approved version, loudness-matched labelled A/B).
+
 You cannot hear. These tools turn what you made into exact checks on the notes, measurements on the
 audio and differences between takes (docs/listening-loop-prd.md section 12). The spec of the brief is
 `ears/specs/nova.spec.json` unless the user names another (`spec=`).

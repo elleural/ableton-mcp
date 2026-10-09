@@ -27,6 +27,19 @@ def test_set_sidechain_routes_and_enables(scratch):
     assert compressor["properties"]["input_routing_type"]["value"] == kick
     assert _parameter(compressor, "S/C On")["display"].lower() == "on"
     assert _parameter(compressor, "Threshold")["display"].startswith("-30")
+    # A Compressor it adds gets the kick-ducking defaults: Peak and a 120 Hz low-pass trigger.
+    shown = [_parameter(compressor, name)["display"] for name in ("Model", "S/C EQ On", "S/C EQ Type")]
+    assert shown == ["Peak", "On", "Low pass"]
+    assert _parameter(compressor, "S/C EQ Freq")["display"].startswith("120")
+    changed = set_sidechain(bass, kick, model="RMS", sidechain_eq={"type": "Bell", "freq": 60, "gain": 6})
+    assert "errors" not in changed and "as_found" not in changed
+    compressor = get_device(bass, result["device"])
+    assert [_parameter(compressor, name)["display"] for name in ("Model", "S/C EQ Type")] == ["RMS", "Bell"]
+    assert _parameter(compressor, "S/C EQ Freq")["display"].startswith("60")
+    assert _parameter(compressor, "S/C EQ Gain")["display"].startswith("6")
+    kept = set_sidechain(bass, kick, sidechain_eq="off")  # an existing Compressor keeps what the call leaves out
+    assert kept["as_found"] == {"Model": "RMS"}
+    assert _parameter(get_device(bass, result["device"]), "S/C EQ On")["display"] == "Off"
     off = set_sidechain(bass, enabled=False)
     assert off["enabled"] is False and off["device"] == result["device"]  # reuses the same Compressor
 

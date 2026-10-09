@@ -97,13 +97,34 @@ than ten pass, labelled with the one gate they failed (a noise oscillator can be
   and a 51 Hz spectral centroid; the capture's phone check gives it 0 %. A role scan should reward some 200 Hz-1 kHz
   harmonics for a game played on phones.
 
-## 5. Tools (outside the repo, in the NOVA work folder)
+## 5. Rendering game one-shots and loops through the loopback (IRIS, 2026-10-09)
+
+- **Start recording before you fire.** Firing a clip with the transport stopped plays at once; a recorder started
+  50 ms later kept only the tails of short sounds (a 25 ms tick came out silent, stabs needed +38 dB). Fire the clips
+  from the recorder's "stream started" callback (`LoopbackInput.record(seconds, started=...)`).
+- **Resample the whole recording, then cut.** Live and the loopback ran at 44.1 kHz; the game wants 48 kHz Opus.
+  Resampling a cut segment rings at its edges and changes the loop length; resample the full take (v1's ffmpeg
+  settings) and cut periods at 48 kHz, so a 6 s loop is exactly 288 000 samples plus the 50 ms tail.
+- **Endless rises loop as Shepard-Risset glissandos.** Octave-spaced components gliding up one octave per period, a
+  raised-cosine weight over log-frequency (zero at both ends) and chained start phases make the file periodic to the
+  sample; played through Live's reverb for several periods, the second period plus 50 ms is a seamless loop (tail
+  identical to head). It lands on A when the components are A's.
+- **No sub oscillator on chord stabs.** A -1 octave sub copies the voicing's fifth below the root (E1 under A1), so
+  the lowest sound is not the root; the stab voicing already carries a low root. Check the lowest peak of every
+  rendered chord.
+- **Names in other people's specs.** The game spec used scientific pitch (A4 = 440 Hz); "pitch classes in octaves 2-4"
+  read literally gave C2-G#2 below the stated A2-A5 range. Generate names from MIDI numbers inside the stated range.
+- **Integrated loudness of a sound under 0.4 s reads -70 LUFS** (no complete gating block): judge short one-shots by
+  true peak or RMS.
+
+## 6. Tools (outside the repo, in the NOVA work folder)
 
 `~/Music/Ableton/NOVA v1 Project/v2-work/`: `pad_scan.py` (pads; `track` mode measures an existing track on a copy),
 `role_scan.py` (bass, arp, lead with role probes), `kit_scan.py` (kick and perc pads of drum kits), `scan_report.py`
 (gates, score, top 10 into `top10.md`), `pad_finalists.py` (stages finalists on twins of the current sound),
-`pad_design.py` (Pad D), `ab_pad.py` (solo-switched, loudness-matched, labelled A/B with a log). Candidate lists come
-from browser searches (`search_browser`, `browse("drums")`).
+`pad_design.py` (Pad D), `ab_pad.py` (solo-switched, loudness-matched, labelled A/B with a log), `render_v2.py`
+(per-tempo arrangement, bounce and v1's `cut_stems.py`), `iris_build.py`, `iris_notes.py`, `iris_render.py` and
+`shepard.py` (the IRIS one-shots). Candidate lists come from browser searches (`search_browser`, `browse("drums")`).
 
 ## Open questions
 

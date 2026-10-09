@@ -349,14 +349,17 @@ another pad), out_note and choke_group (0 = none, 1..16).
 device: the rack (index, name or path). chain: index, name, drum note ("C1") or "return:0" for a
 return chain. Example: set_chain("Drums", "Drum Rack", "C1", volume_db=-3, choke_group=1).
 
-### `set_sidechain(track, source=None, channel='Post FX', threshold_db=-24.0, ratio=4.0, attack_ms=1.0, release_ms=120.0, enabled=True, device=None)`
+### `set_sidechain(track, source=None, channel='Post FX', threshold_db=-24.0, ratio=4.0, attack_ms=1.0, release_ms=120.0, enabled=True, device=None, model=None, sidechain_eq=None)`
 
 Duck `track` whenever `source` plays: sidechain compression, e.g. a bass or pad pumping to the kick.
 
-Uses Live's Compressor, the only device whose sidechain input the API can route: `device`, else the first
-Compressor on the track, else a new one at the end of its chain. source: the triggering track (it needs
-audio output; for a kick inside a drum track, use that track). channel: "Post FX" (default), "Pre FX" or
-"Post Mixer". Sets S/C On, threshold (dB), ratio, attack and release (ms); enabled=False turns it off.
+Uses `device`, else the track's first Compressor (only its sidechain is routable), else a new one at the end.
+source: the trigger track, with audio output (for a kick in a drum track, that track). channel: "Post FX"
+(default), "Pre FX" or "Post Mixer". Sets S/C On, threshold (dB), ratio, attack and release (ms);
+enabled=False turns it off. model: "Peak", "RMS" or "Expand". sidechain_eq filters the trigger: "off", or
+{"type", "freq" (Hz), "q", "gain" (dB)}; types: Low pass, High pass, Bell, Peak, Low Shelf, High Shelf.
+A Compressor this adds gets Peak and a 120 Hz low pass, for a kick (other triggers: "off"); an existing one
+keeps what you omit.
 Example: set_sidechain("Bass", "Drums", threshold_db=-30, ratio=6, release_ms=150).
 
 ## Browser
@@ -642,8 +645,9 @@ Warns: grid, lead rests. Reports kick pattern, density, motif. band: "LOW"/"MID"
 Differences between two takes, or a take and the spec: what improved, regressed or is within noise.
 
 a: take id or "latest"; b: take id, "best" (the kept take of a's set, tempo and variation), "spec",
-"refs" (the top tier against the range of every stored reference; "refs:sparse" uses their sparse
-sections) or "ref:<name>[:<section>]" (one reference, default section "full").
+"refs" (the top tier against the range of every stored reference's full sections), "refs:sparse" (tier T2
+against their sparse sections), "refs:<kind>:<tier>" (any tier), or "ref:<name>[:<section>]" (one
+reference, default section "full"). Against references, dynamics are information only.
 Spectral metrics are loudness-matched. Keep a change only when nothing regressed beyond noise.
 blind=True returns an X/Y packet without ids or statuses for a fresh judge subagent (the key is saved).
 
@@ -659,7 +663,7 @@ Destructive: restore overwrites the current notes and settings (dry_run=True pre
 
 ## Listening loop: references and meter
 
-### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, confirm=False, wait=300.0)` *(destructive)*
+### `ref(action='status', name=None, uri=None, file=None, sections=None, refresh=False, position=None, wait=300.0)` *(destructive)*
 
 References the soundtrack is compared against: measured once, kept as numbers, never as audio.
 
@@ -671,8 +675,8 @@ action:
 - "add": measure a file Frederic owns (file=path; sections optional).
 - "list": stored references, their sections (track, full, sparse) and the shared envelope.
 - "play" (uri, position s) / "pause": the Spotify app, for listening.
-- "setup": what is left of the one-time setup; confirm=True records that Spotify's normalisation and
-  crossfade are off and macOS alerts play through another output.
+- "setup": what is left of the one-time setup (Spotify's normalisation and crossfade off, volume 100,
+  macOS alerts through another output). Only Frederic confirms it: `uv run ears ref setup --confirm`.
 - "status" (default) / "cancel": the running measurement. "delete": remove reference `name`.
 Then compare(take, "refs") compares a take's top tier against all references.
 
